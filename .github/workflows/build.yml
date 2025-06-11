@@ -21,7 +21,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel meson ninja meson-python numpy scipy pybind11
           python -m pip install --no-build-isolation --editable '.[test]'
-          pytest --cov --cov-report html --cov-report xml --cov-report annotate -s
+          pytest --cov --cov-report html --cov-report xml --cov-report annotate -sx
           
       - uses: codecov/codecov-action@v2
         with:

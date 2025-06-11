@@ -16,6 +16,8 @@ Some of the Wigner-d code below is a C++ port of code from Kendrick Smith.
 #include <stdexcept>
 #include <chrono>
 #include <iostream>
+#include <cstdint>   // for int64_t, uint64_t, etc.
+#include <cstddef>   // for ssize_t
 
 #ifdef _OPENMP
 #include <omp.h>

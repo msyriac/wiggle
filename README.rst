@@ -67,7 +67,7 @@ Quick Usage
 
 Accurate power spectrum estimation requires you to first convert a pixelated and masked map to its spherical harmonic coefficients. ``wiggle`` does not provide tools for SHTs and expects you to have the ``alm`` coefficients both for the masked fields and the mask itself already in hand.  These can be obtained using a code like ``healpy`` in the case of HEALPix maps or a code like ``pixell`` in the case of rectangular pixelization maps.
 
-If you are interested in accurate power spectra out to some maximum multipole :math:`\ell_{\text{max}}`, we recommend you evaluate SHTs out to :math:`\ell_{\text{max}}` for the masked fields, but out to  :math:`2\ell_{\text{max}}` for the mask itself. With these in hand, you can obtain unbiased power spectra as follows, in the case of a spin-0 field for example:
+If you are interested in accurate power spectra out to some maximum multipole ``lmax``, we recommend you evaluate SHTs out to ``lmax`` for the masked fields, but out to  ``2 lmax`` for the mask itself. With these in hand, you can obtain unbiased power spectra as follows, in the case of a spin-0 field for example:
 
 .. code-block:: python
 		

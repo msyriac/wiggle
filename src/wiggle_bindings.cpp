@@ -20,6 +20,8 @@ Copyright (c) 2025, Mathew S. Madhavacheril
 // #include <chrono> // optional timing debugging
 #include <iostream>
 #include <algorithm>
+#include <cstdint>   // for int64_t, uint64_t, etc.
+#include <cstddef>   // for ssize_t
 
 
 namespace py = pybind11;

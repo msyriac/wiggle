@@ -4,7 +4,7 @@ import sys as _sys
 
 
 from . import _wiggle
-from .pywiggle import *
+from .core import *
 
 
 

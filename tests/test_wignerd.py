@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-import pywiggle
+from pywiggle import utils, _wiggle
 from fastgl import roots_legendre # pip install fastgl
 import threadpoolctl as tp, sys
 
@@ -18,15 +18,15 @@ def test_pywiggle_spin0(lmax):
     
     mu, w_mu = roots_legendre(N)
     P0 = np.polynomial.legendre.legvander(mu, lmax)
-    P1 = pywiggle.get_wigner_d(lmax,0,0,mu)
+    P1 = utils.get_wigner_d(lmax,0,0,mu)
     bin_edges_trivial = np.arange(lmax+2)  # since bin_edges are of the form low_edge <= ell < upper_edge
     bin_weights_trivial = np.ones(lmax + 1)
     print("Series..")
-    P2 = pywiggle.get_wigner_d(lmax,0,0,mu,bin_edges_trivial,bin_weights_trivial)
+    P2 = utils.get_wigner_d(lmax,0,0,mu,bin_edges_trivial,bin_weights_trivial)
     print("Double binned..")
-    P2a,P2b = pywiggle.get_wigner_d(lmax,0,0,mu,bin_edges_trivial,bin_weights_trivial,bin_weights_trivial)
+    P2a,P2b = utils.get_wigner_d(lmax,0,0,mu,bin_edges_trivial,bin_weights_trivial,bin_weights_trivial)
     print("Legendre..")
-    Pl = pywiggle._wiggle._compute_legendre_matrix(lmax,mu)
+    Pl = _wiggle._compute_legendre_matrix(lmax,mu)
     assert np.allclose(P0,Pl, atol=1e-14)
     assert np.allclose(P0,P1, atol=1e-14)
     assert np.allclose(P0,P2, atol=1e-14)
@@ -47,9 +47,9 @@ def test_pywiggle_spin2(lmax):
     m1=2
     for m2 in [2,0]:
         print(f"Testing test_pywiggle_spin2 with lmax={lmax},m1={m1},m2={m2}")
-        P0 = pywiggle.get_wigner_d(lmax,m1,m2,mu)
-        P1 = pywiggle.get_wigner_d(lmax,m1,m2,mu,bin_edges_trivial,bin_weights_trivial)
-        P2a,P2b = pywiggle.get_wigner_d(lmax,m1,m2,mu,bin_edges_trivial,bin_weights_trivial,bin_weights_trivial)
+        P0 = utils.get_wigner_d(lmax,m1,m2,mu)
+        P1 = utils.get_wigner_d(lmax,m1,m2,mu,bin_edges_trivial,bin_weights_trivial)
+        P2a,P2b = utils.get_wigner_d(lmax,m1,m2,mu,bin_edges_trivial,bin_weights_trivial,bin_weights_trivial)
         assert np.allclose(P0,P1, atol=1e-14)
         assert np.allclose(P0,P2a, atol=1e-14)
         assert np.allclose(P0,P2b, atol=1e-14)

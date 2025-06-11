@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-import pywiggle
+from pywiggle import utils, _wiggle
 
 def test_normalize_weights_per_bin():
     nbins = 4
@@ -22,7 +22,7 @@ def test_normalize_weights_per_bin():
         6/10, 3/10, 1/10  # bin 3
     ])
 
-    result = pywiggle.normalize_weights_per_bin(nbins, bin_indices, weights)
+    result = utils.normalize_weights_per_bin(nbins, bin_indices, weights)
 
     assert np.allclose(result, expected), f"Expected {expected}, got {result}"
     print("Test passed.")
@@ -40,12 +40,12 @@ def test_bin_multipole_array_nontrivial():
 
     expected = np.array([6.0, 5.0, 6.0])
 
-    result2 = pywiggle.bin_array(arr, bin_indices, nbins=3)
+    result2 = utils.bin_array(arr, bin_indices, nbins=3)
     expected2 = np.array([6.0, 5.0, 6.0])  # padded with zeros
     assert np.allclose(result2, expected2), f"Expected {expected2}, got {result2}"
     
     # Test with explicit nbins (larger than needed)
-    result2 = pywiggle.bin_array(arr, bin_indices, nbins=5)
+    result2 = utils.bin_array(arr, bin_indices, nbins=5)
     expected2 = np.array([6.0, 5.0, 6.0, 0.0, 0.0])  # padded with zeros
     assert np.allclose(result2, expected2), f"Expected {expected2}, got {result2}"
 
@@ -60,7 +60,7 @@ def test_uniform_weights_and_bins():
     w_y = np.ones(2)
     w_x = np.ones(2)
 
-    result = pywiggle._wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=1, nbins_x=2)
+    result = _wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=1, nbins_x=2)
     expected = np.array([[4, 6]])
     np.testing.assert_array_equal(result, expected)
 
@@ -74,7 +74,7 @@ def test_weighted_sum_with_different_bins():
     w_y = np.array([1, 10, 100])
     w_x = np.array([1, 0.1])
 
-    result = pywiggle._wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=2, nbins_x=2)
+    result = _wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=2, nbins_x=2)
 
     # Row 0 (bin 0): [1*1*1, 2*1*0.1] = [1, 0.2]
     # Row 1 (bin 1): [3*10*1, 4*10*0.1] = [30, 4]
@@ -92,7 +92,7 @@ def test_out_of_bounds_bins_are_ignored():
     w_y = np.ones(2)
     w_x = np.ones(2)
 
-    result = pywiggle._wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=1, nbins_x=3)
+    result = _wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=1, nbins_x=3)
 
     # Only mat[0,0] counts (y=0, x=1): value = 1
     expected = np.zeros((1, 3))
@@ -108,7 +108,7 @@ def test_empty_matrix_raises():
     w_x = np.array([], dtype=np.float64)
 
     with pytest.raises(ValueError):
-        pywiggle._wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=1, nbins_x=1)
+        _wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=1, nbins_x=1)
 
 
 def test_large_random_case():
@@ -120,7 +120,7 @@ def test_large_random_case():
     w_y = np.random.rand(Ny)
     w_x = np.random.rand(Nx)
 
-    result = pywiggle._wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=10, nbins_x=5)
+    result = _wiggle.bin_matrix(mat, y_bins, x_bins, w_y, w_x, nbins_y=10, nbins_x=5)
 
     assert result.shape == (10, 5)
     expected_total = np.sum(mat * w_y[:, None] * w_x[None, :])

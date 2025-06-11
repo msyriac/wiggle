@@ -67,8 +67,10 @@ py::array bin_matrix_py(py::array_t<double,  py::array::c_style | py::array::for
     py::capsule owner(vec_ptr, [](void* p){ delete reinterpret_cast<std::vector<double>*>(p); });
 
     std::vector<ssize_t> shape   = {nbins_y, nbins_x};
-    std::vector<ssize_t> strides = {sizeof(double)*nbins_x,
-				    sizeof(double)};
+    std::vector<ssize_t> strides = {
+      static_cast<ssize_t>(sizeof(double) * nbins_x),
+      static_cast<ssize_t>(sizeof(double))
+    };
     return py::array(shape, strides, data_ptr, owner);
 }
 

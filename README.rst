@@ -1,5 +1,5 @@
-``wiggle``: angular power spectrum estimation on the sphere
-===========================================================
+``wiggle``
+==========
 
 .. image:: https://github.com/msyriac/wiggle/workflows/Build/badge.svg
            :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
@@ -36,7 +36,7 @@ Compiling from source (advanced / development workflow)
 
 The easiest way to install from source is to use the ``pip`` tool,
 with the ``--no-binary`` flag. This will download the source distribution
-and compile it for you. Don't forget to make sure you have CC and FC set
+and compile it for you. Don't forget to make sure you have CXX set
 if you have any problems.
 
 For all other cases, below are general instructions.
@@ -85,7 +85,7 @@ Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a
 		
 .. code-block:: python
 		
-		chisquare = get_chisquare(dcls,th_filt @ theory_cls,covmat)
+		chisquare = get_chisquare(dcls,th_filt @ theory_cls,cinv)
 
 While the above function ``alm2auto_power_spin0`` is intended for the auto-spectra of a spin-0 field, many additional convenience functions are provided:
 
@@ -110,7 +110,9 @@ The above functions are convenience wrappers around the core class ``Wiggle``, w
 		# Register a beam to deconvolve from both fields
 		g.add_beam('b1', beam_fl)
 		# Get the decoupled cross-Cls from the masked field SHTs
-		ret_TT = g.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',return_theory_filter=False,beam_id1='b1', beam_id2='b1')
+		ret_TT = g.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',
+		                        return_theory_filter=False,
+					beam_id1='b1', beam_id2='b1')
 
 This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``decoupled_cl`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
 

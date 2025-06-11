@@ -66,10 +66,10 @@ py::array bin_matrix_py(py::array_t<double,  py::array::c_style | py::array::for
     // Capsule to free memory when Python GC releases the array
     py::capsule owner(vec_ptr, [](void* p){ delete reinterpret_cast<std::vector<double>*>(p); });
 
-    return py::array({nbins_y, nbins_x},                     // shape
-                     {sizeof(double) * nbins_x, sizeof(double)}, // strides (row‑major)
-                     data_ptr,
-                     owner);
+    std::vector<ssize_t> shape   = {nbins_y, nbins_x};
+    std::vector<ssize_t> strides = {sizeof(double)*nbins_x,
+				    sizeof(double)};
+    return py::array(shape, strides, data_ptr, owner);
 }
 
 // More Python bindings

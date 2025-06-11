@@ -1,0 +1,32 @@
+[build-system]
+requires = ["meson-python>=0.15", "pybind11>=2.11", "build", "pytest"]
+build-backend = "mesonpy"
+
+[project]
+name = "pywiggle"
+version = "0.1.3"
+description = "Fast angular power spectrum estimator"
+authors = [{name = "Mathew Madhavacheril", email = "mathewsyriac@gmail.com"}]
+readme = "README.rst"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+
+dependencies = [
+    'numpy',
+     "pybind11>=2.11",
+     "healpy",
+    'fastgl>=0.1.10',
+    'scipy>=1.0'
+     ]
+
+[project.optional-dependencies]
+test = [
+    'pytest-cov>=2.6',
+    'coveralls>=1.5',
+    'pytest>=4.6',
+    'threadpoolctl'
+]
+
+
+[project.urls]
+Homepage = "https://github.com/msyriac/wiggle"

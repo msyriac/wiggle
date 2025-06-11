@@ -57,7 +57,6 @@ jobs:
 
       - name: Install Dependencies (MacOS)
         run: |
-          python -m pip cache purge
           python -m pip install --upgrade pip setuptools wheel pybind11 pytest numpy<1.24 scipy fastgl threadpoolctl cython
           # If healpy binaries are used, this will lead to an OpenMP clash with Homebrew's openmp
           # which will lead to segfaults. So we compile healpy from scratch
@@ -105,7 +104,6 @@ jobs:
 
       - name: Install Dependencies (MacOS)
         run: |
-          python -m pip cache purge
           python -m pip install --upgrade pip setuptools wheel pybind11 pytest numpy<1.24 scipy fastgl cython
           # If healpy binaries are used, this will lead to an OpenMP clash with Homebrew's openmp
           # which will lead to segfaults. So we compile healpy from scratch
@@ -152,7 +150,6 @@ jobs:
 
       - name: Install Dependencies (MacOS)
         run: |
-          python -m pip cache purge
           python -m pip install --upgrade pip setuptools wheel pybind11 pytest numpy scipy fastgl
           
 

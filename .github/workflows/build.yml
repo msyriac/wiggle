@@ -58,11 +58,12 @@ jobs:
       - name: Install Dependencies (MacOS)
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11 pytest
-          python -m pip install "numpy<1.24"
+          python -m pip install "numpy"
           python -m pip install scipy fastgl cython
           # If healpy binaries are used, this will lead to an OpenMP clash with Homebrew's openmp
           # which will lead to segfaults. So we compile healpy from scratch
-          python -m pip install --no-binary healpy --no-build-isolation healpy 
+          python -m pip install healpy
+          #python -m pip install --no-binary healpy --no-build-isolation healpy 
 
       - name: Install Package (MacOS)
         run: |
@@ -107,12 +108,13 @@ jobs:
       - name: Install Dependencies (MacOS)
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11 pytest
-          python -m pip install "numpy<1.24"
+          python -m pip install "numpy"
           python -m pip install scipy fastgl cython
           # If healpy binaries are used, this will lead to an OpenMP clash with Homebrew's openmp
           # which will lead to segfaults. So we compile healpy from scratch
-          python -m pip install --no-binary healpy --no-build-isolation healpy 
-          
+          #python -m pip install --no-binary healpy --no-build-isolation healpy 
+          python -m pip install healpy
+
 
       - name: Install Package (MacOS)
         run: |

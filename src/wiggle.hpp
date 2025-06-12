@@ -10,6 +10,9 @@ Copyright (c) 2025, Mathew S. Madhavacheril
 #include <stddef.h>
 #include <cmath>
 #include <vector>
+#include <cstdint>   // for int64_t, uint64_t, etc.
+#include <cstddef>   // for ssize_t
+
 
 // Functions for wiggle in double precision
 namespace wiggle {

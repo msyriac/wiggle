@@ -36,3 +36,8 @@ extension = py.extension_module(
 
 # Install the pure-Python package tree itself
 install_subdir('pywiggle', install_dir : py.get_install_dir())
+install_subdir(
+  'pywiggle/tests',                               
+  install_dir : join_paths(py.get_install_dir(),  
+                           'pywiggle')
+)

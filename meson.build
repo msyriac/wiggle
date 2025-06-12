@@ -23,21 +23,15 @@ omp_dep = dependency('openmp')
 add_project_arguments('-fopenmp', language: 'cpp')
 add_project_link_arguments('-fopenmp', language: 'cpp')
 
+install_subdir('pywiggle', install_dir : py.get_install_dir())
 
 extension = py.extension_module(
-  '_wiggle',
-  sources             : sources,
-  dependencies        : [omp_dep],
-  cpp_args            : pybind_includes + ['-O3', '-fopenmp'],
-  include_directories : inc,
-  subdir              : 'pywiggle',      
-  install             : true,
+    '_wiggle',
+    sources: sources,
+    dependencies: [omp_dep],
+    cpp_args: pybind_includes + ['-O3', '-fopenmp'],
+    include_directories: inc,
+    subdir: 'pywiggle',   
+    install: true,
 )
 
-# Install the pure-Python package tree itself
-install_subdir('pywiggle', install_dir : py.get_install_dir())
-install_subdir(
-  'pywiggle/tests',                               
-  install_dir : join_paths(py.get_install_dir(),  
-                           'pywiggle')
-)

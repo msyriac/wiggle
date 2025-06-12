@@ -42,8 +42,8 @@ jobs:
         
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.23.3
-        env:
-          CIBW_SKIP: "pp* *-musllinux*" # TODO: Temporary
+        # env:
+        #   CIBW_SKIP: "pp* *-musllinux*" # TODO: Temporary
 
       - uses: actions/upload-artifact@v4
         with:
@@ -86,7 +86,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.23.3
         env:
           CIBW_ARCHS_MACOS: ${{ matrix.cibw_arch }}
-          CIBW_SKIP: "pp*" # TODO: Temporary
+          # CIBW_SKIP: "pp*" # TODO: Temporary
 
           # compile with OpenMP flags
           CIBW_ENVIRONMENT_MACOS: |

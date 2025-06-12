@@ -3,6 +3,7 @@ name: Build
 on: [push, pull_request]
 
 jobs:
+         
   test-linux:
     name: "Run tests on Linux"
     runs-on: ubuntu-latest
@@ -25,152 +26,7 @@ jobs:
           
       - uses: codecov/codecov-action@v2
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           verbose: true # optional (default = false)
-
-  test-macos:
-    name: "Run tests on MacOS"
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        
-      - name: Install LLVM + OpenMP runtime (macOS only)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm libomp
-          LLVM_PREFIX="$(brew --prefix llvm)"
-
-          # put the OpenMP-enabled clang/clang++ first in PATH
-          echo "PATH=${LLVM_PREFIX}/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=${LLVM_PREFIX}/bin/clang"   >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-
-          # headers & linker path for libomp ­— works on both Intel (/usr/local)
-          # and Apple Silicon (/opt/homebrew)
-          echo "CPPFLAGS=-I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "LDFLAGS=-L${LLVM_PREFIX}/lib -Wl,-rpath,${LLVM_PREFIX}/lib -lomp" >> $GITHUB_ENV
-        
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Dependencies (MacOS)
-        run: |
-          python -m pip install --upgrade pip setuptools wheel pybind11 pytest
-          python -m pip install "numpy"
-          python -m pip install scipy fastgl cython
-          # If healpy binaries are used, this will lead to an OpenMP clash with Homebrew's openmp
-          # which will lead to segfaults. So we compile healpy from scratch
-          python -m pip install healpy
-          #python -m pip install --no-binary healpy --no-build-isolation healpy 
-
-      - name: Install Package (MacOS)
-        run: |
-          export CFLAGS="-O3 -fopenmp"
-          export CXXFLAGS="-O3 -fopenmp"
-          export FFLAGS="-O3 -fopenmp=libomp"
-          export LDFLAGS="${LDFLAGS}"
-          python -m pip install . '.[test]'
-
-      - name: Run Tests (MacOS)
-        run: |
-
-          PYTHONFAULTHANDLER=1 pytest -vs -x --capture=no
-
-  test-macos13:
-    name: "Run tests on MacOS-13"
-    runs-on: macos-13
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install LLVM + OpenMP runtime (macOS only)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm libomp
-          LLVM_PREFIX="$(brew --prefix llvm)"
-
-          # put the OpenMP-enabled clang/clang++ first in PATH
-          echo "PATH=${LLVM_PREFIX}/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=${LLVM_PREFIX}/bin/clang"   >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-
-          # headers & linker path for libomp ­— works on both Intel (/usr/local)
-          # and Apple Silicon (/opt/homebrew)
-          echo "CPPFLAGS=-I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "LDFLAGS=-L${LLVM_PREFIX}/lib -Wl,-rpath,${LLVM_PREFIX}/lib -lomp" >> $GITHUB_ENV
-        
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Dependencies (MacOS)
-        run: |
-          python -m pip install --upgrade pip setuptools wheel pybind11 pytest
-          python -m pip install "numpy"
-          python -m pip install scipy fastgl cython
-          # If healpy binaries are used, this will lead to an OpenMP clash with Homebrew's openmp
-          # which will lead to segfaults. So we compile healpy from scratch
-          #python -m pip install --no-binary healpy --no-build-isolation healpy 
-          python -m pip install healpy
-
-
-      - name: Install Package (MacOS)
-        run: |
-          export CFLAGS="-O3 -fopenmp"
-          export CXXFLAGS="-O3 -fopenmp"
-          export FFLAGS="-O3 -fopenmp=libomp"
-          export LDFLAGS="${LDFLAGS}"
-          python -m pip install . '.[test]'
-
-      - name: Run Tests (MacOS)
-        run: |
-          pytest -vs
-
-  test-macos13-11:
-    name: "Run tests on MacOS-13 Python 3.11"
-    runs-on: macos-13
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install LLVM + OpenMP runtime (macOS only)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm libomp
-          LLVM_PREFIX="$(brew --prefix llvm)"
-
-          # put the OpenMP-enabled clang/clang++ first in PATH
-          echo "PATH=${LLVM_PREFIX}/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=${LLVM_PREFIX}/bin/clang"   >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-
-          # headers & linker path for libomp ­— works on both Intel (/usr/local)
-          # and Apple Silicon (/opt/homebrew)
-          echo "CPPFLAGS=-I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "LDFLAGS=-L${LLVM_PREFIX}/lib -Wl,-rpath,${LLVM_PREFIX}/lib -lomp" >> $GITHUB_ENV
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Dependencies (MacOS)
-        run: |
-          python -m pip install --upgrade pip setuptools wheel pybind11 pytest numpy scipy fastgl
-          
-
-      - name: Install Package (MacOS)
-        run: |
-          export CFLAGS="-O3 -fopenmp"
-          export CXXFLAGS="-O3 -fopenmp"
-          export FFLAGS="-O3 -fopenmp=libomp"
-          export LDFLAGS="${LDFLAGS}"
-          python -m pip install . '.[test]'
-
-      - name: Run Tests (MacOS)
-        run: |
-          pytest -vs
-          
           
   build_wheels:
     name: Build wheels on ${{ matrix.os }}
@@ -178,86 +34,20 @@ jobs:
     strategy:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [ubuntu-latest, macos-13]
+        os: [ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install LLVM + OpenMP runtime (macOS only)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm libomp
-          LLVM_PREFIX="$(brew --prefix llvm)"
-
-          # put the OpenMP-enabled clang/clang++ first in PATH
-          echo "PATH=${LLVM_PREFIX}/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=${LLVM_PREFIX}/bin/clang"   >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-
-          # headers & linker path for libomp ­— works on both Intel (/usr/local)
-          # and Apple Silicon (/opt/homebrew)
-          echo "CPPFLAGS=-I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "LDFLAGS=-L${LLVM_PREFIX}/lib -Wl,-rpath,${LLVM_PREFIX}/lib -lomp" >> $GITHUB_ENV
         
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.23.3
-        env:
-          # Tell clang and gfortran to emit calls that the **LLVM** runtime understands
-          #   - clang/clang++ just need -fopenmp
-          CIBW_ENVIRONMENT_MACOS: |
-            CFLAGS="-O3 -fopenmp"
-            CXXFLAGS="-O3 -fopenmp"
-            LDFLAGS="${LDFLAGS}"
-          MACOSX_DEPLOYMENT_TARGET: "13.0"
 
       - uses: actions/upload-artifact@v4
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
-  build_wheels_macos_arm:
-
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [macos-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install LLVM + OpenMP runtime (macOS only)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm libomp
-          LLVM_PREFIX="$(brew --prefix llvm)"
-
-          # put the OpenMP-enabled clang/clang++ first in PATH
-          echo "PATH=${LLVM_PREFIX}/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=${LLVM_PREFIX}/bin/clang"   >> $GITHUB_ENV
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> $GITHUB_ENV
-
-          # headers & linker path for libomp ­— works on both Intel (/usr/local)
-          # and Apple Silicon (/opt/homebrew)
-          echo "CPPFLAGS=-I${LLVM_PREFIX}/include" >> $GITHUB_ENV
-          echo "LDFLAGS=-L${LLVM_PREFIX}/lib -Wl,-rpath,${LLVM_PREFIX}/lib -lomp" >> $GITHUB_ENV
-        
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.23.3
-        env:
-          # Tell clang and gfortran to emit calls that the **LLVM** runtime understands
-          #   - clang/clang++ just need -fopenmp
-          CIBW_ENVIRONMENT_MACOS: |
-            CFLAGS="-O3 -fopenmp"
-            CXXFLAGS="-O3 -fopenmp"
-            LDFLAGS="${LDFLAGS}"
-          MACOSX_DEPLOYMENT_TARGET: "14.0"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
-          path: ./wheelhouse/*.whl
 
 
   build_sdist:
@@ -305,3 +95,25 @@ jobs:
           password: ${{ secrets.PYPI_TOKEN }}
           # To test: repository_url: https://test.pypi.org/legacy/
 
+
+  test-linux-wheel:
+    needs: [upload_pypi]
+    name: "Run tests on Linux with the uploaded wheels"
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python: ["3.13", "3.12", "3.11", "3.10"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      
+      - name: Run Tests (Linux)
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pytest
+          python -m pip install pywiggle
+          pytest --pyargs pywiggle.tests
+          

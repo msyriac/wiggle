@@ -27,7 +27,11 @@ Make sure your ``pip`` tool is up-to-date. To install ``wiggle``, run:
 		
    $ pip install pywiggle --user
 
-This will install a pre-compiled binary suitable for your system (only Linux and Mac OS X with Python>=3.9 are supported). 
+This will install a pre-compiled binary suitable for your system (only Linux and Mac OS X with Python>=3.9 are supported). After installation, make sure to run a test with:
+
+.. code-block:: console
+		
+   $ pytest --pyargs pywiggle.tests
 
 If you require more control over your installation, e.g. using Intel compilers, please see the section below on compiling from source.
 
@@ -61,6 +65,11 @@ perform micro-builds on usage in this case):
    $ pip install --upgrade pip meson ninja meson-python cython numpy pybind11
    $ pip install  --no-build-isolation --editable .
 
+After installation, make sure to run a test with:
+   
+.. code-block:: console
+   
+   $ pytest
 
 Quick Usage
 -----------
@@ -71,13 +80,13 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 
 .. code-block:: python
 		
-		import pywiggle
-		import numpy as np
+		> import pywiggle
+		> import numpy as np
 
-		lmax = 4000
-		bin_edges = np.arange(40,lmax,40)
+		> lmax = 4000
+		> bin_edges = np.arange(40,lmax,40)
 		
-		dcls, th_filt = pywiggle.alm2auto_power_spin0(lmax,alm,mask_alm,bin_edges = bin_edges)
+		> dcls, th_filt = pywiggle.alm2auto_power_spin0(lmax,alm,mask_alm,bin_edges = bin_edges)
 
 
 Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a matrix that can be dotted with a theory spectrum to obtain the binned theory to compare the power spectrum to (e.g. for inference):
@@ -85,7 +94,7 @@ Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a
 		
 .. code-block:: python
 		
-		chisquare = get_chisquare(dcls,th_filt @ theory_cls,cinv)
+		> chisquare = get_chisquare(dcls,th_filt @ theory_cls,cinv)
 
 While the above function ``alm2auto_power_spin0`` is intended for the auto-spectra of a spin-0 field, many additional convenience functions are provided:
 
@@ -102,17 +111,17 @@ The above functions are convenience wrappers around the core class ``Wiggle``, w
 
 .. code-block:: python
 		
-		w = Wiggle(lmax, bin_edges=bin_edges)
+		> w = Wiggle(lmax, bin_edges=bin_edges)
 		# Register the SHT of a mask and identify it with a key
-		w.add_mask('mt1', mask_alm_t1)
+		> w.add_mask('mt1', mask_alm_t1)
 		# Register another mask
-		w.add_mask('mt2', mask_alm_p2)
+		> w.add_mask('mt2', mask_alm_p2)
 		# Register a beam to deconvolve from both fields
-		g.add_beam('b1', beam_fl)
+		> g.add_beam('b1', beam_fl)
 		# Get the decoupled cross-Cls from the masked field SHTs
-		ret_TT = g.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',
-		                        return_theory_filter=False,
-					beam_id1='b1', beam_id2='b1')
+		> ret_TT = g.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',
+		                          return_theory_filter=False,
+		     			  beam_id1='b1', beam_id2='b1')
 
 This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``decoupled_cl`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
 

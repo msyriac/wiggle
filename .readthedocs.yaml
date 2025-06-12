@@ -15,11 +15,11 @@ build:
     - build-essential
     - libomp-dev
 
-  environment:
-    CFLAGS:  "-O3 -fopenmp"
-    CXXFLAGS: "-O3 -fopenmp"
-    FFLAGS:   "-O3 -fopenmp=libomp"
-    LDFLAGS:  "-fopenmp"
+environment:
+  CFLAGS:  "-O3 -fopenmp"
+  CXXFLAGS: "-O3 -fopenmp"
+  FFLAGS:   "-O3 -fopenmp=libomp"
+  LDFLAGS:  "-fopenmp"
   
 
 

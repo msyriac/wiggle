@@ -4,7 +4,7 @@ build-backend = "mesonpy"
 
 [project]
 name = "pywiggle"
-version = "0.1.11"
+version = "0.1.12"
 description = "Fast angular power spectrum estimator"
 authors = [{name = "Mathew Madhavacheril", email = "mathewsyriac@gmail.com"}]
 readme = "README.rst"

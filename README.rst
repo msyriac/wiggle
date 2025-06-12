@@ -4,8 +4,8 @@
 .. image:: https://github.com/msyriac/wiggle/workflows/Build/badge.svg
            :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
 
-.. image:: https://readthedocs.org/projects/pywiggle/badge/?version=latest
-           :target: https://pywiggle.readthedocs.io/en/latest/?badge=latest
+.. image:: https://readthedocs.org/projects/wiggle/badge/?version=latest
+           :target: https://wiggle.readthedocs.io/en/latest/?badge=latest
 		   :alt: Documentation Status
 
 
@@ -14,7 +14,7 @@
 Typically, estimates of the power spectrum of masked fields involve products of Wigner-3j symbols, which can be factorized into products of Wigner-d matrices and integrated exactly using Gauss-Legendre quadrature. This code provides efficient implementations of this approach to mode decoupling for exact power spectrum estimation, which in the case of binned spectra can be orders of magnitude faster than other approaches (often around a second of compute-time at most).
 
 * Free software: BSD license
-* Documentation: https://pywiggle.readthedocs.io.
+* Documentation: https://wiggle.readthedocs.io.
 
 
   

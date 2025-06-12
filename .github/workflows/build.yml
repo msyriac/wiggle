@@ -116,6 +116,10 @@ jobs:
   build_sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      
     steps:
       - uses: actions/checkout@v4
 
@@ -172,6 +176,9 @@ jobs:
     needs: [upload_pypi]
     name: "Run tests on ${{ matrix.os }} with uploaded wheels"
     runs-on: ${{ matrix.os }}
+    
+    env:
+      VERSION: ${{ needs.build_sdist.outputs.version }}
 
     strategy:
       matrix:

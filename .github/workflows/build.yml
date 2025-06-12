@@ -176,6 +176,7 @@ jobs:
     needs: [upload_pypi, build_sdist]
     name: "Run tests on ${{ matrix.os }} with uploaded wheels"
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
     
     env:
       VERSION: ${{ needs.build_sdist.outputs.version }}

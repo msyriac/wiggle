@@ -16,7 +16,8 @@ dependencies = [
      "pybind11>=2.11",
      "healpy",
     'fastgl>=0.1.10',
-    'scipy>=1.0'
+    'scipy>=1.0',
+    'threadpoolctl'
      ]
 
 [project.optional-dependencies]
@@ -24,7 +25,6 @@ test = [
     'pytest-cov>=2.6',
     'coveralls>=1.5',
     'pytest>=4.6',
-    'threadpoolctl'
 ]
 
 

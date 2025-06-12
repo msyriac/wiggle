@@ -4,9 +4,9 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 import os,sys
-sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0,os.path.abspath('../pywiggle'))
-
+# sys.path.insert(0, os.path.abspath('..'))
+# sys.path.insert(0,os.path.abspath('../pywiggle'))
+sys.modules['pywiggle._wiggle'] = types.ModuleType('pywiggle._wiggle')
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

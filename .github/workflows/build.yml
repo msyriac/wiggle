@@ -173,7 +173,7 @@ jobs:
 
 
   test-wheel:
-    needs: [upload_pypi]
+    needs: [upload_pypi, build_sdist]
     name: "Run tests on ${{ matrix.os }} with uploaded wheels"
     runs-on: ${{ matrix.os }}
     

@@ -62,13 +62,6 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
 
-# Modules to mock for the purposes of doc build.
-autodoc_mock_imports = []
-for missing in [
-        'scipy', 'healpy',
-        'pywiggle._wiggle',
-]:
-    autodoc_mock_imports.append(missing)
 
 
 # -- Options for HTML output -------------------------------------------

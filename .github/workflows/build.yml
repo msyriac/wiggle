@@ -214,4 +214,5 @@ jobs:
           
       - name: Run Tests
         run: |
+          cd ~
           pytest --pyargs pywiggle.tests

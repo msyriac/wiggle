@@ -195,7 +195,7 @@ jobs:
 
       - name: Install test dependencies and wheel from PyPI
         run: |
-          python -m pip install --upgrade pip setuptools wheel pytest
+          python -m pip install --upgrade pip setuptools wheel pytest ducc0 threadpoolctl scipy numpy
           echo "Installing pywiggle==$VERSION"
 
           MAX_WAIT=300   # seconds (5 minutes)

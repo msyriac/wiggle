@@ -189,9 +189,45 @@ class Wiggle(object):
         M = np.einsum('i,ij,ik->jk', W, b1, b2, optimize='greedy')
         return M
     
-    def _get_coupling_matrix_from_ids(self,mask_id1,mask_id2,spintype,bin_weight_id,
-                                          beam_id1,beam_id2):
-        # Get mode-coupling G matrices
+    def get_coupling_matrix_from_ids(self,mask_id1,mask_id2,spintype,bin_weight_id=None,
+                                          beam_id1=None,beam_id2=None):
+        """
+        Compute the mode-coupling matrix for a given pair of masks and spin configuration.
+
+        This method retrieves the mode-coupling matrix used in power spectrum estimation, 
+        based on the specified spin configuration (`spintype`) and mask identifiers. 
+        The method supports scalar (spin-0) and spin-2 field combinations, e.g. for use 
+        in CMB or large-scale structure analyses.
+
+        Parameters
+        ----------
+        mask_id1 : str or int
+            Identifier for the first mask to use in the coupling matrix calculation.
+        mask_id2 : str or int
+            Identifier for the second mask to use in the coupling matrix calculation.
+        spintype : str
+            The spin configuration to compute the coupling matrix for. Supported values are:
+                - '00' : scalar-scalar (spin-0 × spin-0)
+                - '++' : spin-2 auto (E-mode like)
+                - '--' : spin-2 cross (B-mode like)
+                - '20' : spin-2 × spin-0 mixed term
+        bin_weight_id : str or int, optional
+            Identifier for the binning weights, if applicable.
+        beam_id1 : str or int, optional
+            Identifier for the beam function in the first map.
+        beam_id2 : str or int, optional
+            Identifier for the beam function in the second map.
+
+        Returns
+        -------
+        numpy.ndarray
+            The computed coupling matrix corresponding to the specified spin type and masks.
+
+        Raises
+        ------
+        ValueError
+            If an unsupported `spintype` is provided.
+        """
         
         if spintype not in ['00','++','--','20']: raise ValueError
         f = lambda spin1,spin2,parity: self._get_m(mask_id1,mask_id2,spin1=spin1,spin2=spin2,parity=parity,
@@ -238,12 +274,13 @@ class Wiggle(object):
     @cache
     def get_theory_filter(self,mask_id1,mask_id2=None,spintype='00',bin_weight_id=None,beam_id1=None,beam_id2=None):
         r"""
-        Construct the theoretical bandpower filter :math:`\mathcal{F}^{s_as_b}_{q\ell}`
+        Construct the theoretical bandpower filter :math:`\mathcal{F}^{s_as_b}_{q\ell}`,
+        as defined in arxiv:1809.09603.
 
         This method computes the filter matrix that transforms the theoretical full-sky power 
         spectrum :math:`\mathsf{C}^{ab,\mathrm{th}}_\ell` into the corresponding prediction 
         for the *binned, decoupled* bandpowers :math:`\mathsf{B}^{ab,\mathrm{th}}_q` in the 
-        presence of mode coupling and nontrivial binning. The filter is given by:
+        presence of mode coupling and nontrivial binning. The filter is given by (see arxiv:1809.09603) :
 
         .. math::
             \mathrm{vec}\left[\mathsf{B}^{ab,\mathrm{th}}_q\right] =
@@ -361,7 +398,7 @@ class Wiggle(object):
     @cache
     def _get_cinv(self,mask_id1,mask_id2,spintype,bin_weight_id,
                   beam_id1,beam_id2):
-        mcm = self._get_coupling_matrix_from_ids(mask_id1,mask_id2,spintype=spintype,
+        mcm = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,spintype=spintype,
                                                  beam_id1=beam_id1,beam_id2=beam_id2,bin_weight_id=bin_weight_id)
         cinv = np.linalg.inv(mcm)
         return cinv
@@ -609,12 +646,14 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
         beam_id2 = 'p2'
     else:
         beam_id2 = None
-    m = g._get_coupling_matrix_from_ids('m1','m1',spintype=spintype,bin_weight_id='b1',
+    m = g.get_coupling_matrix_from_ids('m1','m1',spintype=spintype,bin_weight_id='b1',
                                        beam_id1=beam_id1,beam_id2=beam_id2)
     if return_obj:
         return m,g
     return m
-    
+
+
+
 def alm2auto_power_spin0(lmax,alm,mask_alm,bin_edges = None,bin_weights = None,beam_fl=None,
                     return_theory_filter=True):
     r"""

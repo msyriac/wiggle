@@ -241,7 +241,7 @@ def _prepare_bins(bin_edges,bin_weights,lmax,bin_weights2=None):
     bin_indices = multipole_to_bin_indices(lmax, bin_edges)
     
     if (bin_weights is None): bin_weights = np.ones(lmax+1)
-    if bin_weights.size<(lmax+1): raise ValueError
+    if bin_weights.size<(lmax+1): raise ValueError(f"bin_weights size is {bin_weights.size} but need lmax+1={lmax+1}")
     # TODO: Do other checks like making sure bins are monotonic and non-overlapping.
     bin_weights = bin_weights[:lmax+1]
     nbins = len(bin_edges)-1

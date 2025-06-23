@@ -5,6 +5,7 @@
            :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
 	   :alt: Github Actions Status
 
+
 .. image:: https://readthedocs.org/projects/wiggle/badge/?version=latest
            :target: https://wiggle.readthedocs.io/en/latest/?badge=latest
 	   :alt: Documentation Status

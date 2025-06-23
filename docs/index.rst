@@ -5,8 +5,7 @@
 
 wiggle documentation
 ====================
-
-|			 
+			 
 .. image:: https://raw.githubusercontent.com/msyriac/wiggle/main/docs/wiggle_logo.png
   :width: 150
   :alt: Wiggle logo

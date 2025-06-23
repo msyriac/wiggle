@@ -14,9 +14,7 @@
   :width: 150
   :alt: Wiggle logo
 	
-``wiggle`` stands for the WIGner Gauss-Legendre Estimator. This Python package provides a fast implementation of unbiased angular power spectrum estimation of spin-0 and spin-2 fields on the sphere, most commonly encountered in the context of cosmological data analysis.
-
-Typically, estimates of the power spectrum of masked fields involve products of Wigner-3j symbols, which can be factorized into products of Wigner-d matrices and integrated exactly using Gauss-Legendre quadrature. This code provides efficient implementations of this approach to mode decoupling for exact power spectrum estimation, which in the case of binned spectra can be orders of magnitude faster than other approaches (often around a second of compute-time at most).
+``wiggle`` stands for the WIGner Gauss-Legendre Estimator. This Python package provides a fast implementation of unbiased angular power spectrum estimation of spin-0 and spin-2 fields on the sphere, most commonly encountered in the context of cosmological data analysis. With an efficient and exact algorithm, this code performs mode-decoupling very fast; in the case of binned spectra, ``wiggle`` can be orders of magnitude faster than other approaches (often around one second of compute-time at most).
 
 * Free software: BSD license
 * Documentation: https://wiggle.readthedocs.io.

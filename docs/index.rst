@@ -6,6 +6,11 @@
 wiggle documentation
 ====================
 
+|			 
+.. image:: wiggle_logo.png
+  :width: 200
+  :alt: Wiggle logo
+
 Welcome to the documentation for ``wiggle``,  a tool for fast unbiased angular power spectrum estimation of spin-0 and spin-2 fields on the sphere, most commonly encountered in the context of cosmological data analysis.
 
 

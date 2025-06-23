@@ -323,6 +323,7 @@ class Wiggle(object):
 
         """
         
+        if not(self._binned): raise ValueError("No bin edges where specified when initializing Wiggle, so no theory filter can be determined.")
         if mask_id2 is None: mask_id2 = mask_id1
         f = lambda spin1, spin2, parity: self._thfilt_core(mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id=bin_weight_id,
                                                       beam_id1=beam_id1,beam_id2=beam_id2)
@@ -542,7 +543,7 @@ class Wiggle(object):
         Returns
         -------
         dcls : ndarray
-            The decoupled, binned power spectrum as a 1D array over bandpowers.
+            The decoupled, (optionally, binned) power spectrum as a 1D array over bandpowers.
 
         tdecmat : ndarray, optional
             The theory filter matrix :math:`\mathcal{F}^{s_as_b}_{q\ell}` of shape 
@@ -585,9 +586,9 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
                                       beam_fl1 = None,beam_fl2 = None,
                                       return_obj=False):
     r"""
-    Compute the binned mode-coupling matrix from the pseudo-Cl of a sky mask.
+    Compute the  (optionally, binned) mode-coupling matrix from the pseudo-Cl of a sky mask.
 
-    This function is a high-level wrapper to generate the binned mode-coupling matrix 
+    This function is a high-level wrapper to generate the  (optionally, binned) mode-coupling matrix 
     :math:`\mathcal{M}^{s_as_b}_{q q'}` using the pseudo-power spectrum of a mask. 
     This matrix describes how true sky power at one multipole leaks into others due to 
     incomplete sky coverage, beam smoothing, and binning.
@@ -627,7 +628,7 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
     Returns
     -------
     m : ndarray
-        The binned mode-coupling matrix of shape `(n_bins, n_bins)`.
+        The  (optionally, binned) mode-coupling matrix of shape `(n_bins, n_bins)` if binned or `(lmax+1, lmax+1)` if unbinned.
 
     g : Wiggle, optional
         The `Wiggle` object used to generate the matrix, returned only if `return_obj=True`.

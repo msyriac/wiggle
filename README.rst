@@ -10,7 +10,7 @@
 
 
 |			 
-.. image:: wiggle_logo.png
+.. image:: https://raw.githubusercontent.com/msyriac/wiggle/main/docs/wiggle_logo.png
   :width: 200
   :alt: Wiggle logo
 	

@@ -2,14 +2,11 @@
 ==========
 
 .. image:: https://github.com/msyriac/wiggle/workflows/Build/badge.svg
-           :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
-	   :alt: Github Actions Status
-
-
+   :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
+   :alt: Github Actions Status
 .. image:: https://readthedocs.org/projects/wiggle/badge/?version=latest
-           :target: https://wiggle.readthedocs.io/en/latest/?badge=latest
-	   :alt: Documentation Status
-
+   :target: https://wiggle.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
 .. image:: https://img.shields.io/pypi/v/pywiggle.svg
    :target: https://pypi.org/project/pywiggle/
    :alt: PyPI version

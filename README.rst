@@ -1,7 +1,7 @@
 ``wiggle``
 ==========
 
-.. image:: https://github.com/msyriac/wiggle/workflows/Build/badge.svg
+.. image:: https://img.shields.io/github/actions/workflow/status/msyriac/wiggle/build.yml?branch=main
    :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
    :alt: Github Actions Status
 .. image:: https://readthedocs.org/projects/wiggle/badge/?version=latest

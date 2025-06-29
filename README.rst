@@ -1,5 +1,5 @@
-``wiggle``
-==========
+wiggle
+======
 
 .. image:: https://img.shields.io/github/actions/workflow/status/msyriac/wiggle/build.yml?branch=main
    :target: https://github.com/msyriac/wiggle/actions?query=workflow%3ABuild
@@ -134,7 +134,7 @@ This object can then be reused if the same masks are being re-used, which avoids
 Coming soon
 ~~~~~~~~~~~
 
-TB and EB spectra as well as mode-decoupling for purified E/B fiels have not been implemented yet, but are planned to in a future release.
+TB and EB spectra as well as mode-decoupling for purified E/B fiels have not been implemented yet, but will be in a future release.
 
 
 Contributions

@@ -122,9 +122,9 @@ The above functions are convenience wrappers around the core class ``Wiggle``, w
 		# Register another mask
 		> w.add_mask('mt2', mask_alm_p2)
 		# Register a beam to deconvolve from both fields
-		> g.add_beam('b1', beam_fl)
+		> w.add_beam('b1', beam_fl)
 		# Get the decoupled cross-Cls from the masked field SHTs
-		> ret_TT = g.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',
+		> ret_TT = w.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',
 		                          return_theory_filter=False,
 		     			  beam_id1='b1', beam_id2='b1')
 

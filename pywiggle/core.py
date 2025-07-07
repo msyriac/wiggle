@@ -1483,3 +1483,139 @@ def alm2cross_power_spin02(lmax, alm_t1, alm_e1, alm_b1, alm_t2, alm_e2, alm_b2,
                             beam_id1=beam_idt2, beam_id2=beam_ide1)
 
     return (*ret_TT, *ret_EE, *ret_BB, *retT1E2, *ret_T2E1)
+
+
+
+def pure_EB(Q, U, mask_0, masked_on_input=True,
+           return_mask=False, lmax=None, is_healpix=True,
+           eps=1e-4):
+
+    """
+    Perform pure E/B mode decomposition on a masked polarization map, adapted
+    from code by Will Coulton.
+
+    Implements the Smith & Zaldarriaga (2007) formalism to compute 
+    "pure" E and B-mode multipoles from Q/U Stokes parameter maps 
+    using an apodized mask, removing ambiguous modes due to masking.
+
+    Parameters
+    ----------
+    Q : ndarray or enmap
+        Stokes Q polarization map. Should be masked if `masked_on_input=True`.
+    U : ndarray or enmap
+        Stokes U polarization map. Same shape and type as Q.
+    mask_0 : ndarray
+        Scalar apodized mask, typically smoothed to avoid ringing.
+        Should be in the same geometry as Q and U (Healpix or enmap).
+    masked_on_input : bool, optional
+        If True, assumes Q and U have already been multiplied by mask_0.
+        If False, the code will divide out the mask (with threshold protection).
+        Default is True.
+    return_mask : bool, optional
+        If True, returns the spin-1 and spin-2 derivatives of the mask
+        instead of the pure E/B multipoles. Useful for debugging.
+        Default is False.
+    lmax : int or None, optional
+        Maximum multipole to compute. If None, defaults to:
+        - `3*nside - 1` for Healpix inputs
+        - Half the Nyquist limit for enmap inputs
+    is_healpix : bool, optional
+        Whether the input maps are in HEALPix format. If False, assumes
+        enmap geometry. Default is True.
+    tiny : float, optional
+        Threshold below which mask values are treated as zero to avoid
+        division by very small values. Default is 1e-4.
+
+    Returns
+    -------
+    pureE : ndarray
+        Spherical harmonic coefficients of the purified E-mode signal,
+        shape consistent with `cs.alm_info(lmax)`.
+    pureB : ndarray
+        Spherical harmonic coefficients of the purified B-mode signal.
+    
+    OR
+
+    mask_1, mask_2 : ndarray
+        If `return_mask=True`, returns the spin-1 and spin-2 derivatives 
+        of the mask (used in the purification process) instead of pureE/B.
+
+    Notes
+    -----
+    - Requires the `pixell` library for spherical harmonic transforms and 
+      map handling.
+    - This method suppresses E→B leakage caused by the mask, and
+      is critical for detecting weak B-mode signals like those from 
+      primordial gravitational waves.
+    - Based on the formalism in:
+        * Smith, Kendrick M. "Pseudo-Cl estimators which do not mix 
+          E and B modes." Phys. Rev. D 74.8 (2006): 083002.
+        * Smith & Zaldarriaga, Phys. Rev. D 76.4 (2007): 043001.
+
+    Examples
+    --------
+    >>> pureE, pureB = pureEB(Qmap, Umap, apod_mask, is_healpix=True)
+    
+    >>> mask_1, mask_2 = pureEB(Qmap, Umap, apod_mask, return_mask=True)
+    """    
+    # Unmask if necessary
+    if masked_on_input:
+        good = mask_0 > eps
+        Q = np.where(good, Q / mask_0, 0.0)
+        U = np.where(good, U / mask_0, 0.0)
+
+    # Geometry selection
+    if is_healpix:
+        nside = hp.npix2nside(mask_0.size)
+        lmax  = int(3*nside-1) if lmax is None else int(lmax)
+        map2alm, alm2map = cs.map2alm_healpix, cs.alm2map_healpix
+        template = np.zeros((2, mask_0.size))
+    else:                                   
+        lmax = int(np.min(np.pi / Q.pixshape() / 2)) if lmax is None else int(lmax)
+        map2alm, alm2map = cs.map2alm, cs.alm2map
+        template = enmap.zeros((2,) + Q.shape, wcs=Q.wcs)
+
+    ainfo = cs.alm_info(lmax)
+    ells  = np.arange(lmax+1, dtype=float)
+
+    # Build mask derivatives
+    wAlm  = map2alm(mask_0, ainfo=ainfo, spin=0)
+
+    fac1  = np.zeros_like(ells); fac1[1:]  = np.sqrt(ells[1:]*(ells[1:]+1))
+    fac2  = np.zeros_like(ells); fac2[2:]  = np.sqrt((ells[2:]-1)*ells[2:]*
+                                                    (ells[2:]+1)*(ells[2:]+2))
+
+    wAlm1 = ainfo.lmul(wAlm.copy(), fac1)
+    wAlm2 = ainfo.lmul(wAlm.copy(), fac2)
+
+    mask1 = pixellWrapperSpinS(alm2map, wAlm1, template, 1)
+    mask2 = pixellWrapperSpinS(alm2map, wAlm2, template, 2)
+    mask1[mask_0 < eps] = 0.0
+    mask2[mask_0 < eps] = 0.0
+    if return_mask:
+        return mask1, mask2
+
+    # Build the three pseudo‑spin fields
+    template[...] = (Q*mask_0, U*mask_0)
+    E2, B2 = map2alm(template, ainfo=ainfo, spin=2)
+
+    template[...] = (Q*mask1.real + U*mask1.imag,
+                     U*mask1.real - Q*mask1.imag)
+    E1, B1 = map2alm(template, ainfo=ainfo, spin=1)
+
+    E0 = map2alm(Q*mask2.real + U*mask2.imag, ainfo=ainfo, spin=0)
+    B0 = map2alm(U*mask2.real - Q*mask2.imag, ainfo=ainfo, spin=0)
+
+    # Combine with correct coefficients
+    alpha = np.zeros_like(ells); alpha[2:] = 2.0*np.sqrt(1.0/((ells[2:]+2)*(ells[2:]-1)))
+    beta  = np.zeros_like(ells); beta[2:]  = np.sqrt(1.0/((ells[2:]+2)*(ells[2:]+1)*ells[2:]*(ells[2:]-1)))
+
+    pureE = E2 + ainfo.lmul(E1, alpha) - ainfo.lmul(E0, beta)
+    pureB = B2 + ainfo.lmul(B1, alpha) - ainfo.lmul(B0, beta)
+
+    # remove ell = 0,1
+    killMD = np.ones_like(ells); killMD[:2] = 0.0
+    pureE  = ainfo.lmul(pureE, killMD)
+    pureB  = ainfo.lmul(pureB, killMD)
+
+    return pureE, pureB

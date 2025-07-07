@@ -24,8 +24,8 @@ Core classes and functions
 
 class Wiggle(object):
     """
-    Gauss-Legendre Power Spectrum Mode-Decoupler
-    ============================================
+    Position-space Power Spectrum Mode-Decoupler
+    =============================================
 
     This class provides the numerical backend for computing mode-decoupled 
     angular power spectra using Gauss-Legendre quadrature methods. It is 
@@ -69,7 +69,6 @@ class Wiggle(object):
                  verbose = True, xlmax = 2, xgllmax = 2):
         
         # TODO: cache_file implementation
-        self._spintype = {'TT':'00','TE':'20','EE':'++','BB':'--'}
             
         if xlmax<2:
             warnings.warn("Not using mask Cls out to 2*lmax. Mode decoupling may not be accurate!")
@@ -118,7 +117,7 @@ class Wiggle(object):
         return xi
 
     @cache
-    def _get_G_term_weights(self,mode_count_weight,parity,apply_bin_weights,bin_weight_id):
+    def _get_G_term_weights(self,mode_count_weight,parity,apply_bin_weights,bin_weight_id,pfact=None):
         # Weights needed for the the things that multiply Wigner-ds in the G-matrices
         # Start building weights
         ws = np.ones(self.lmax+1)
@@ -127,21 +126,28 @@ class Wiggle(object):
             ws = ws * ((2*self.ells[:self.lmax+1]+1)/2.)
         if self._binned and apply_bin_weights:
             ws = ws * self._nweights[bin_weight_id]
+        # For purification
+        if pfact is not None:
+            ls = self.ells[:self.lmax+1]
+            mul = np.sqrt((ls-1)*ls*(ls+1)*(ls+2))
+            ws[ls>=2] = ws[ls>=2] * (mul[ls>=2])**pfact
         return ws
 
     @cache
     def _get_b1_b2(self,spin1,spin2,parity,bin_weight_id,
-                   beam_id1,beam_id2):
+                   beam_id1,beam_id2,gfact=None):
         # Get the left (ell) and right (ell') sides of the G-matrices
         
         # these are weights that multiply the ell side of the G matrix
-        # it includes a parity term as well bandpower bin weights
-        nweights = self._get_G_term_weights(mode_count_weight=False,parity=parity,apply_bin_weights=True,bin_weight_id=bin_weight_id)
+        # it includes a parity term as well as bandpower bin weights
+        nweights = self._get_G_term_weights(mode_count_weight=False,parity=parity,apply_bin_weights=True,bin_weight_id=bin_weight_id,
+                                            pfact=(-gfact) if (gfact is not None) else None)
 
         
         # these are weights that multiply the ell' side of the G matrix
         # it includes a parity term and a mode counting term but no bin weights
-        nweights2 = self._get_G_term_weights(mode_count_weight=True,parity=parity,apply_bin_weights=False,bin_weight_id=None)
+        nweights2 = self._get_G_term_weights(mode_count_weight=True,parity=parity,apply_bin_weights=False,bin_weight_id=None,
+                                             pfact=gfact if (gfact is not None) else None)
         # the ell' side also includes beam transfers if you want to deconvolve those
         if beam_id1 is not None:
             nweights2 = nweights2 * self._beam_fl[beam_id1]
@@ -170,16 +176,15 @@ class Wiggle(object):
         
     @cache
     def _get_m(self,mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id,
-               beam_id1,beam_id2):
+               beam_id1,beam_id2,gfact=None):
         # Get the core of the mode-coupling G matrices. This is where the expensive
         # dot product happens.
 
         # Know of situations where other spins would be useful? Write to us!
-        # TODO: Implement pure E/B terms which require spin-1
         if [spin1,spin2] not in [[0,0],[2,2],[2,0]]: raise NotImplementedError
 
         # Get the left (ell) and right (ell') sides of the G-matrices
-        b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2)
+        b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
             
         # Get the Gauss-Legendre quadrature weighted correlation functions of the mask
         xi = self._get_corr(mask_id1,mask_id2,parity=parity)
@@ -190,7 +195,7 @@ class Wiggle(object):
         return M
     
     def get_coupling_matrix_from_ids(self,mask_id1,mask_id2,spintype,bin_weight_id=None,
-                                          beam_id1=None,beam_id2=None):
+                                          beam_id1=None,beam_id2=None,npure=0):
         """
         Compute the mode-coupling matrix for a given pair of masks and spin configuration.
 
@@ -229,21 +234,45 @@ class Wiggle(object):
             If an unsupported `spintype` is provided.
         """
         
-        if spintype not in ['00','++','--','20']: raise ValueError
-        f = lambda spin1,spin2,parity: self._get_m(mask_id1,mask_id2,spin1=spin1,spin2=spin2,parity=parity,
-                                              bin_weight_id=bin_weight_id,
-                                              beam_id1=beam_id1,beam_id2=beam_id2)
+        if spintype not in ['00','++','--','20','22']: raise ValueError
+        f = lambda spin1,spin2,parity,gfact: self._get_m(mask_id1,mask_id2,spin1=spin1,spin2=spin2,parity=parity,
+                                                    bin_weight_id=bin_weight_id,
+                                                    beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
         if spintype=='00':
-            return f(0,0,'+')
+            return f(0,0,'+',None)
         elif spintype in ['++','--']:
-            g1 = f(2,2,'+')
-            g2 = f(2,2,'-')
+            if npure==0:
+                g1 = f(2,2,'+',None)
+                g2 = f(2,2,'-',None)
+            elif npure==1:
+                g1 = f(2,0,'+',1)
+                g2 = f(2,0,'-',1)
+            elif npure==2:
+                g1 = f(0,0,'+',2)
+                g2 = f(0,0,'-',2)                
             if spintype=='++':
                 return (g1+g2)/2.
             elif spintype=='--':
                 return (g1-g2)/2.
         elif spintype=='20':
-            return f(2,0,'+')
+            if npure==0:
+                return f(2,0,'+',None)
+            else:
+                return f(0,0,'+',1)
+        elif spintype=='22':
+            Mpp = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,'++',bin_weight_id=bin_weight_id,
+                                          beam_id1=beam_id1,beam_id2=beam_id2)
+            Mmm = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,'--',bin_weight_id=bin_weight_id,
+                                          beam_id1=beam_id1,beam_id2=beam_id2)
+            zero = np.zeros_like(Mpp)
+
+            return np.block([
+                [ Mpp,     zero,   zero,   Mmm  ],
+                [ zero,   Mpp,    -Mmm,     zero],
+                [ zero,  -Mmm,     Mpp,     zero],
+                [ Mmm,     zero,   zero,   Mpp  ]
+            ])
+        
 
     def _get_mask_cls(self,mask_id1,mask_id2):
         if mask_id2 is None: mask_id2 = mask_id1
@@ -329,15 +358,25 @@ class Wiggle(object):
                                                       beam_id1=beam_id1,beam_id2=beam_id2)
         if spintype=='00':
             Mc = f(0,0,'+')
-        elif spintype in ['++','--']:
+        elif spintype=='22':
             Mc1 = f(2,2,'+')
             Mc2 = f(2,2,'-')
-            if spintype=='++':
-                Mc = (Mc1+Mc2)/2.
-            elif spintype=='--':
-                Mc = (Mc1-Mc2)/2.
+            Mpp = (Mc1+Mc2)/2.
+            Mmm = (Mc1-Mc2)/2.
+
+            zero = np.zeros_like(Mpp)
+
+            Mc = np.block([
+                [ Mpp,     zero,   zero,   Mmm  ],
+                [ zero,   Mpp,    -Mmm,     zero],
+                [ zero,  -Mmm,     Mpp,     zero],
+                [ Mmm,     zero,   zero,   Mpp  ]
+            ])
+            
         elif spintype=='20':
             Mc = f(2,0,'+')
+
+            
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,bin_weight_id=bin_weight_id,
                               beam_id1=beam_id1,beam_id2=beam_id2)
         thfilt = np.einsum('ij,jk->ik', cinv, Mc, optimize='greedy')
@@ -398,9 +437,9 @@ class Wiggle(object):
 
     @cache
     def _get_cinv(self,mask_id1,mask_id2,spintype,bin_weight_id,
-                  beam_id1,beam_id2):
+                  beam_id1,beam_id2,npure=0):
         mcm = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,spintype=spintype,
-                                                 beam_id1=beam_id1,beam_id2=beam_id2,bin_weight_id=bin_weight_id)
+                                                 beam_id1=beam_id1,beam_id2=beam_id2,bin_weight_id=bin_weight_id,npure=npure)
         cinv = np.linalg.inv(mcm)
         return cinv
     
@@ -483,10 +522,18 @@ class Wiggle(object):
         
         if beam_fl.size < (self.lmax+1): raise ValueError(f"Beam filter need to be at least lmax.")
         self._beam_fl[beam_id] = beam_fl[:self.lmax+1]
-        
-    def decoupled_cl(self,alms1,alms2, mask_id1, mask_id2=None, spectype='TT',
+
+    def _bin_if_needed(self,cls,bin_weight_id):
+        cls = cls[:self.lmax+1]
+        # Bin Cls
+        if self._binned:
+            return bin_array(cls, self._bin_indices, self.nbins,weights=self._nweights[bin_weight_id])
+        else:
+            return cls        
+
+    def decoupled_cl(self,alms1,alms2, mask_ids1, mask_ids2=None,
                      bin_weight_id = None,
-                     beam_id1 = None, beam_id2 = None,
+                     beam_id1 = None, beam_id2 = None, pure_E = False, pure_B = False,
                      return_theory_filter=False):
 
         r"""
@@ -504,25 +551,28 @@ class Wiggle(object):
 
         Parameters
         ----------
-        alms1 : array_like
-            Spherical harmonic coefficients of the first map (e.g., T, E, or B, galaxy overdensity, convergence).
+        alms1, alms2 : ndarray
+            Spherical-harmonic coefficients of the first and second map,
+            both with shape
 
-        alms2 : array_like
-            Spherical harmonic coefficients of the second map. Can be the same as `alms1`
-            for auto-spectra.
+            * ``(N_alm,)``           – a single scalar field;
+            * ``(1, N_alm)``         – same as above (explicit 1-pol);
+            * ``(2, N_alm)``         – spin-2 field (*E*, *B*);
+            * ``(3, N_alm)``         – scalar + spin-2 (*T*, *E*, *B*).
 
-        mask_id1 : str
-            Identifier for the mask applied to the first field, previously provided through `self.add_mask`.
+        The two arrays **must be identical in shape**.  If you pass the
+        *same* object twice the function returns auto-spectra.
+        
 
-        mask_id2 : str or None, optional
-            Identifier for the mask on the second field, previously provided through `self.add_mask`. If `None`, uses `mask_id1`.
+        mask_ids1 : str or sequence(str)
+            Mask identifier(s) previously registered via :py:meth:`add_mask`
+            for the first field.  If you pass a single string it is applied
+            to all polarisation components; otherwise give a two-element list/tuple with
+            one entry for the spin-0 field and the second for the spin-2 field.
 
-        spectype : str, default='TT'
-            Type of power spectrum to compute. Supported values are:
-            - `'TT'` (both alms are spin-0 scalars, e.g. for CMB temperature, galaxy overdensity, convergence)
-            - `'EE'` (both alms are E-mode decompositions of a spin-2 field)
-            - `'BB'` (both alms are B-mode decompositions of a spin-2 field)
-            - `'TE'` (alms are a spin-0 scalar and an E-mode decomposition of a spin-2 field)
+        mask_ids2 : str or sequence(str), optional
+            Mask identifier(s) for the second field.  If *None* (default) the
+            same mask(s) as *mask_ids1* are used.
 
         bin_weight_id : str or None, optional
             Identifier for custom multipole binning weights. If not specified,
@@ -540,50 +590,154 @@ class Wiggle(object):
             If True, also return the theory bandpower filter 
             :math:`\mathcal{F}^{s_as_b}_{q\ell}` for use in model comparison.
 
+        ----------
         Returns
         -------
-        dcls : ndarray
-            The decoupled, (optionally, binned) power spectrum as a 1D array over bandpowers.
+        spectra : dict
+            Keys and shapes depend on the input polarisation:
 
-        tdecmat : ndarray, optional
-            The theory filter matrix :math:`\mathcal{F}^{s_as_b}_{q\ell}` of shape 
-            `(n_bins, lmax + 1)` if `return_theory_filter` is True.
+            * scalar–scalar → ``{'TT': {'Cls': (nbin | lmax+1,)}}``
+            * spin-2 only   → ``{'EE', 'EB', 'BE', 'BB'}``
+            * scalar+spin-2 → ``{'TT', 'TE', 'ET', 'TB', 'BT',
+                                  'EE', 'EB', 'BE', 'BB'}``
+
+            Each entry holds a dict with the field ``'Cls'`` containing the
+            decoupled (and possibly binned) spectrum.
+
+            If *return_theory_filter* is *True*, a second key ``'Th'`` is
+            added containing the corresponding theory filters with 
+            shape ``(n_bins, lmax+1)``.
+
+            For the pure-polarization part, the theory filter combines
+            EE, EB, BE and BB and is in spectra['ThPol']. For most cases
+            involving null EB, BE and BB, you only need the EE portion of this
+            matrix.
+
+        ----------
+        Raises
+        ------
+        ValueError
+            * The two ``alm`` arrays differ in shape.
+            * Unsupported number of polarisation components.
+            * Inconsistent mask list length.
+            * Internal binning/mixing dimensions do not match.
+        
 
         Notes
         -----
         - This method is the recommended interface for evaluating both auto- and 
           cross-spectra in masked sky analyses, but other convenience wrappers are provided elsewhere.
+
         """
-        if spectype not in ['TT','EE','BB','TE']: raise NotImplementedError
+
+        if alms1.shape != alms2.shape: raise ValueError
+        if alms1.ndim==1:
+            alms1 = alms1[None,:]
+            alms2 = alms2[None,:]
+        else:
+            if alms1.ndim>2 or alms1.ndim<1: raise ValueError
+        npol = alms1.shape[0]
+        if npol==1:
+            spin = "T"
+        elif npol==2:
+            spin = "P"
+        elif npol==3:
+            spin = "T+P"
+        else:
+            raise ValueError
+        
+        npure = sum([pure_E,pure_B]) # number of purified fields
+            
+        if mask_ids2 is None: mask_ids2 = mask_ids1
+        if isinstance(mask_ids1,str): mask_ids1 = [mask_ids1]*2
+        if isinstance(mask_ids2,str): mask_ids2 = [mask_ids2]*2
 
         # Unity bin weights if none specified
         if self._binned and (bin_weight_id is None):
             self._populate_unity_bins()
+            bin_weight_id = _reserved_bin_id
+        
+
+        decfunc = lambda cls,spintype,m1,m2: self._core_decoupled_cl(cls, m1, mask_id2=m2, spintype=spintype,
+                                                           bin_weight_id = bin_weight_id,
+                                                           beam_id1 = beam_id1, beam_id2 = beam_id2,
+                                                                return_theory_filter=return_theory_filter, npure=npure)
+
+        bfunc = lambda cls: self._bin_if_needed(cls,bin_weight_id)
+        
+        ret_cls = {}
+        if 'T' in spin:
+            # Get TT
+            cls_tt = bfunc(alm2cl(alms1[0], alms2[0]))
+            ret_cls['TT'] = decfunc(cls_tt,'00',mask_ids1[0],mask_ids2[0])
+        if '+' in spin:
+            # Get TE
+            cls_te = bfunc(alm2cl(alms1[0], alms2[1]))
+            ret_cls['TE'] = decfunc(cls_te,'20',mask_ids1[0],mask_ids2[1])
+            cls_et = bfunc(alm2cl(alms1[1], alms2[0]))
+            ret_cls['ET'] = decfunc(cls_et,'20',mask_ids1[1],mask_ids2[0])
+            # Get TB
+            cls_tb = bfunc(alm2cl(alms1[0], alms2[2]))
+            ret_cls['TB'] = decfunc(cls_tb,'20',mask_ids1[0],mask_ids2[1])
+            cls_bt = bfunc(alm2cl(alms1[2], alms2[0]))
+            ret_cls['BT'] = decfunc(cls_bt,'20',mask_ids1[1],mask_ids2[0])
+        if 'P' in spin:
+            # Get EE
+            cls_ee = bfunc(alm2cl(alms1[1], alms2[1]))
+            # Get EB
+            cls_eb = bfunc(alm2cl(alms1[1], alms2[2]))
+            # Get EB
+            cls_be = bfunc(alm2cl(alms1[2], alms2[1]))
+            # Get BB
+            cls_bb = bfunc(alm2cl(alms1[2], alms2[2]))
+
+            cls_pol = np.concatenate([cls_ee, cls_eb,cls_be, cls_bb])
+            ret = decfunc(cls_pol,'22',mask_ids1[1],mask_ids2[1])
+            if return_theory_filter: ret_cls['ThPol'] = ret['Th']
+            # Unpack concatenated decoupled spectra
+            rlist = ['EE','EB','BE','BB']
+            start = 0
+            if self._binned:
+                step = self.nbins
+            else:
+                step = self.lmax+1
+            for i,spec in enumerate(rlist):
+                end = start + step
+                ret_cls[spec] = {'Cls':ret['Cls'][start:end]}
+                if ret_cls[spec]['Cls'].size!=step: raise ValueError
+                start = end
+                
+        return ret_cls
+            
+            
+
+            
+        
+    def _core_decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
+                           bin_weight_id = None,
+                           beam_id1 = None, beam_id2 = None,
+                           return_theory_filter=False, npure = 0):
+
+        if spintype not in ['00','20','22']: raise NotImplementedError
                 
         # Get MCM
-        cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=self._spintype[spectype],
+        cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,
                               bin_weight_id=bin_weight_id,
-                              beam_id1=beam_id1,beam_id2=beam_id2)
-        field_cls = alm2cl(alms1,alms2)[:self.lmax+1]
-        # Bin Cls
-        if self._binned:
-            bcls = bin_array(field_cls, self._bin_indices, self.nbins,weights=self._nweights[bin_weight_id])
-        else:
-            bcls = field_cls
+                              beam_id1=beam_id1,beam_id2=beam_id2,npure=npure)
         # Decouple
-        dcls = np.dot(cinv,bcls)
-        
-        if return_theory_filter:
-            tdecmat = self.get_theory_filter(mask_id1,mask_id2,spintype=self._spintype[spectype],
-                                             bin_weight_id=bin_weight_id,
-                                             beam_id1=beam_id1,beam_id2=beam_id2)
-            return dcls, tdecmat
-        else:
-            return dcls
+        dcls = np.dot(cinv,pcls)
 
+        ret = {}
+        ret['Cls'] = dcls
+        if return_theory_filter:
+            ret['Th'] = self.get_theory_filter(mask_id1,mask_id2,spintype=spintype,
+                                               bin_weight_id=bin_weight_id,
+                                               beam_id1=beam_id1,beam_id2=beam_id2)
+        return ret
+    
 
 def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = None,bin_weights = None,
-                                      beam_fl1 = None,beam_fl2 = None,
+                                      beam_fl1 = None,beam_fl2 = None, npure=0,
                                       return_obj=False):
     r"""
     Compute the  (optionally, binned) mode-coupling matrix from the pseudo-Cl of a sky mask.
@@ -648,7 +802,7 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
     else:
         beam_id2 = None
     m = g.get_coupling_matrix_from_ids('m1','m1',spintype=spintype,bin_weight_id='b1',
-                                       beam_id1=beam_id1,beam_id2=beam_id2)
+                                       beam_id1=beam_id1,beam_id2=beam_id2,npure=npure)
     if return_obj:
         return m,g
     return m

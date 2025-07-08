@@ -77,8 +77,6 @@ def test_power():
         # Generate Q/U maps from theoretical Cls
         maps = hp.synfast(cl_th, NSIDE, new=True, pol=True, lmax=LMAX)
 
-
-
         maps = maps*mask
         alms = hp.map2alm(maps, lmax=LMAX, iter=0,pol=True)
 

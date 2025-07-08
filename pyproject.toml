@@ -31,3 +31,6 @@ test = [
 
 [project.urls]
 Homepage = "https://github.com/msyriac/wiggle"
+
+[tool.setuptools.package-data]
+pywiggle = ["data/*.npz"]

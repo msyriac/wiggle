@@ -104,7 +104,7 @@ def test_recover_tensor_Bmode():
     apod_deg = 10.0
     radius_deg = np.sqrt(area_deg2 / np.pi)
     radius_rad = np.deg2rad(radius_deg)
-    np.random.seed(10)
+    np.random.seed(20)
 
     # Load CMB Cls ---
     ps, ells = load_test_spectra()
@@ -171,6 +171,11 @@ def test_recover_tensor_Bmode():
 
     with bench.show("pure namaster"):
         f2yp = nmt.NmtField(maskh, [Qh, Uh], purify_e=False, purify_b=True,n_iter=0)
+        nam_map = f2yp.get_maps()
+        halm = hp.map2alm([Qh*0,nam_map[0],nam_map[1]],pol=True,iter=0,lmax=lmax)
+        nam_bb = cs.alm2cl(halm[2],halm[2])
+                          
+        print(nam_map.shape)
         w_yp = nmt.NmtWorkspace.from_fields(f2yp, f2yp, b)
         cl_yp_nmt = compute_master(f2yp, f2yp, w_yp)
         cl_p_bb = cl_yp_nmt[3]
@@ -184,6 +189,7 @@ def test_recover_tensor_Bmode():
 
     
     pureE, pureB = pywiggle.get_pure_EB_alms(Q, U, mask,lmax=lmax)
+    pureE2, pureB2 = halm[1], halm[2]
     # pureE2, pureB2 = pywiggle.get_pure_EB_alms(Q*mask, U*mask, mask,masked_on_input=True,lmax=lmax)
 
     ialms = np.zeros((2,oalm[0].size),dtype=np.complex128)
@@ -191,17 +197,6 @@ def test_recover_tensor_Bmode():
     ialms[1] = pureB # impure E, pure B
     w = pywiggle.Wiggle(lmax, bin_edges=bin_edges)
     w.add_mask('m', mask_alm)
-    Mm_np = w.get_coupling_matrix_from_ids('m','m','--',npure=0)
-    Mm_p = w.get_coupling_matrix_from_ids('m','m','--',npure=1)
-
-    oio.plot_img(Mm_np,'impureMm.png')
-    oio.plot_img(Mm_p,'pureMm.png')
-
-    Mp_np = w.get_coupling_matrix_from_ids('m','m','++',npure=0)
-    Mp_p = w.get_coupling_matrix_from_ids('m','m','++',npure=1)
-
-    oio.plot_img(Mp_np,'impureMp.png')
-    oio.plot_img(Mp_p,'pureMp.png')
     
     ret = w.decoupled_cl(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
     
@@ -216,7 +211,19 @@ def test_recover_tensor_Bmode():
     icl_EE = ret['EE']['Cls']
     icl_BB = ret['BB']['Cls']
 
+
+    w = pywiggle.Wiggle(lmax, bin_edges=bin_edges)
+    w.add_mask('m', mask_alm)
+    
+    ialms[0]  = halm[1]
+    ialms[1] = halm[2]
+    ret = w.decoupled_cl(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
+    ncl_EE = ret['EE']['Cls']
+    ncl_BB = ret['BB']['Cls']
+    
+
     # Compute power spectrum and compare ---
+    bpow_nam = nam_bb / w2
     bpow = cs.alm2cl(pureB) / w2
     epow = cs.alm2cl(pureE) / w2
     # obpow = cs.alm2cl(pureB2) / w2
@@ -231,8 +238,10 @@ def test_recover_tensor_Bmode():
     plt.plot(ls, input_bb, label='Input BB',ls='--')
     plt.plot(ells, bb_orig, label='Full-sky unmasked BB power',alpha=0.5)
     plt.plot(ells, bb_masked, label='Masked BB power divided by mean(mask**2)')
+    plt.plot(ell, bpow_nam, label='Recovered pure B (Nmt)')
     plt.plot(ell, bpow, label='Recovered pure B')
     plt.plot(bcents,cl_BB, label = 'Decoupled pure B', marker='d', ls='none')
+    plt.plot(bcents,ncl_BB, label = 'Decoupled wiggle, pure B Nmt', marker='d', ls='none')
     plt.plot(bcents,icl_BB, label = 'Decoupled impure B', marker='o', ls='none')
     plt.plot(leff,cl_p_bb, label = 'Decoupled pure B (Nmt)', marker='x', ls='none')
     
@@ -266,3 +275,20 @@ def test_recover_tensor_Bmode():
     plt.grid(True)
     plt.tight_layout()
     plt.savefig('emodes.png',dpi=200)
+
+
+    # Compute power spectrum and compare ---
+    plt.figure()
+    plt.plot(ell, bpow, label='Recovered pure B')
+    plt.plot(bcents,cl_BB, label = 'Decoupled pure B', marker='d', ls='none')
+    print(cl_BB)
+    plt.xlim(2, 300)
+    plt.yscale('log')
+    plt.xlabel(r'$\ell$')
+    plt.ylabel(r'$C_\ell^{BB}$')
+    plt.legend()
+    plt.title(f'B-mode recovery test ({area_deg2:.0f} deg$^2$ mask)')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('bmodes_alone.png',dpi=200)
+    

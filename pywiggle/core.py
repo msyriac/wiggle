@@ -105,7 +105,12 @@ class Wiggle(object):
         self._nweights = {}
         self._beam_fl = {}
 
-
+    def _zeros(self,):
+        if self._binned:
+            return np.zeros((self.nbins,self.nbins))
+        else:
+            return np.zeros((self.lmax+1,self.lmax+1))
+        
     @cache
     def _get_corr(self,mask_id1,mask_id2,parity):
         if mask_id2 is None: mask_id2 = mask_id1
@@ -240,13 +245,12 @@ class Wiggle(object):
             If an unsupported `spintype` is provided.
         """
         
-        if spintype not in ['00','++','--','20','22']: raise ValueError
+        if spintype not in ['00','20_E','20_B','22']: raise ValueError(f'spintype {spintype} not recognized')
         f = lambda spin1,spin2,parity,gfact: self._get_m(mask_id1,mask_id2,spin1=spin1,spin2=spin2,parity=parity,
                                                     bin_weight_id=bin_weight_id,
                                                     beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
-        if spintype=='00':
-            return f(0,0,'+',None)
-        elif spintype in ['++','--']:
+
+        def Mp(npure):
             if npure==0:
                 g1 = f(2,2,'+',None)
                 g2 = f(2,2,'-',None)
@@ -256,35 +260,42 @@ class Wiggle(object):
             elif npure==2:
                 g1 = f(0,0,'+',2)
                 g2 = f(0,0,'-',2)                
-            if spintype=='++':
-                return (g1+g2)/2.
-            elif spintype=='--':
-                return (g1-g2)/2.
+            return (g1+g2)/2.
+
+        if spintype=='00':
+            return f(0,0,'+',None)
         elif spintype[:2]=='20':
-            if (('E' in spintype) and pure_E) or (('B' in spintype) and pure_B)
+            if (('E' in spintype) and pure_E) or (('B' in spintype) and pure_B):
                 return f(0,0,'+',1)
             else:
                 return f(2,0,'+',None)
         elif spintype=='22':
-            Mpp = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,'++',bin_weight_id=bin_weight_id,
-                                          beam_id1=beam_id1,beam_id2=beam_id2)
-            Mmm = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,'--',bin_weight_id=bin_weight_id,
-                                          beam_id1=beam_id1,beam_id2=beam_id2)
-            zero = np.zeros_like(Mpp)
 
+            zero = self._zeros()
+            
+            if pure_E and pure_B:
+                Mm_EB = zero # TODO: confirm this identity
+            else:
+                if any([pure_E,pure_B]):
+                    g1 = f(2,0,'+',1)
+                    g2 = f(2,0,'-',1)
+                else:
+                    g1 = f(2,2,'+',None)
+                    g2 = f(2,2,'-',None)
+                Mm_EB = (g1-g2)/2.
+
+                
+            Mp_EE = Mp(int(pure_E)*2)
+            Mp_BB = Mp(int(pure_B)*2)
+            Mp_EB = Mp(sum([pure_E,pure_B]))
+            
             return np.block([
-                [ Mpp,     zero,   zero,   Mmm  ],
-                [ zero,   Mpp,    -Mmm,     zero],
-                [ zero,  -Mmm,     Mpp,     zero],
-                [ Mmm,     zero,   zero,   Mpp  ]
+                [ Mp_EE,     zero,   zero,   Mm_EB  ],
+                [ zero,   Mp_EB,    -Mm_EB,     zero],
+                [ zero,  -Mm_EB,     Mp_EB,     zero],
+                [ Mm_EB,     zero,   zero,   Mp_BB  ]
             ])
         
-            # return np.block([
-            #     [ Mpp,     zero,   zero,   zero  ],
-            #     [ zero,   Mpp,    zero,     zero],
-            #     [ zero,  zero,     Mpp,     zero],
-            #     [ zero,     zero,   zero,   Mpp  ]
-            # ])
 
     def _get_mask_cls(self,mask_id1,mask_id2):
         if mask_id2 is None: mask_id2 = mask_id1
@@ -750,7 +761,7 @@ class Wiggle(object):
     
 
 def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = None,bin_weights = None,
-                                      beam_fl1 = None,beam_fl2 = None, , pure_E=False,pure_B=False,
+                                      beam_fl1 = None,beam_fl2 = None, pure_E=False,pure_B=False,
                                       return_obj=False):
     r"""
     Compute the  (optionally, binned) mode-coupling matrix from the pseudo-Cl of a sky mask.

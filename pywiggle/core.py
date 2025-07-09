@@ -120,12 +120,18 @@ class Wiggle(object):
     def _get_G_term_weights(self,mode_count_weight,parity,apply_bin_weights,bin_weight_id,pfact=None):
         # Weights needed for the the things that multiply Wigner-ds in the G-matrices
         # Start building weights
+
+        # Unity bin weights if none specified
+        if self._binned and (bin_weight_id is None):
+            self._populate_unity_bins()
+            bin_weight_id = _reserved_bin_id
+        
         ws = np.ones(self.lmax+1)
         ws = _parity_flip(ws,parity)  # this applies (-1)^ell if parity is '-'
         if mode_count_weight:
             ws = ws * ((2*self.ells[:self.lmax+1]+1)/2.)
         if self._binned and apply_bin_weights:
-            ws = ws * self._nweights[bin_weight_id]
+            ws = ws * self._nweights[str(bin_weight_id)]
         # For purification
         if pfact is not None:
             ls = self.ells[:self.lmax+1]
@@ -273,6 +279,12 @@ class Wiggle(object):
                 [ Mmm,     zero,   zero,   Mpp  ]
             ])
         
+            # return np.block([
+            #     [ Mpp,     zero,   zero,   zero  ],
+            #     [ zero,   Mpp,    zero,     zero],
+            #     [ zero,  zero,     Mpp,     zero],
+            #     [ zero,     zero,   zero,   Mpp  ]
+            # ])
 
     def _get_mask_cls(self,mask_id1,mask_id2):
         if mask_id2 is None: mask_id2 = mask_id1
@@ -527,7 +539,7 @@ class Wiggle(object):
         cls = cls[:self.lmax+1]
         # Bin Cls
         if self._binned:
-            return bin_array(cls, self._bin_indices, self.nbins,weights=self._nweights[bin_weight_id])
+            return bin_array(cls, self._bin_indices, self.nbins,weights=self._nweights[str(bin_weight_id)])
         else:
             return cls        
 
@@ -654,16 +666,16 @@ class Wiggle(object):
         if isinstance(mask_ids1,str): mask_ids1 = [mask_ids1]*2
         if isinstance(mask_ids2,str): mask_ids2 = [mask_ids2]*2
 
-        # Unity bin weights if none specified
-        if self._binned and (bin_weight_id is None):
-            self._populate_unity_bins()
-            bin_weight_id = _reserved_bin_id
         
 
         decfunc = lambda cls,spintype,m1,m2: self._core_decoupled_cl(cls, m1, mask_id2=m2, spintype=spintype,
                                                            bin_weight_id = bin_weight_id,
                                                            beam_id1 = beam_id1, beam_id2 = beam_id2,
                                                                 return_theory_filter=return_theory_filter, npure=npure)
+        # Unity bin weights if none specified
+        if self._binned and (bin_weight_id is None):
+            self._populate_unity_bins()
+            bin_weight_id = _reserved_bin_id
 
         bfunc = lambda cls: self._bin_if_needed(cls,bin_weight_id)
         
@@ -1591,7 +1603,7 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
         template = enmap.zeros((2,) + Q.shape, wcs=Q.wcs)
 
     ainfo = cs.alm_info(lmax)
-    ells  = np.arange(lmax+1, dtype=float)
+    ells  = np.arange(lmax+1, dtype=np.float64)
 
     # Mask derivatives
     wAlm = map2alm(mask, ainfo=ainfo, spin=0)

@@ -1,10 +1,11 @@
 import numpy as np
-from pixell import enmap, enplot, curvedsky as cs, utils, bench
+from pixell import enmap, enplot, curvedsky as cs, utils, bench,reproject
 import matplotlib.pyplot as plt
 import pywiggle 
 import pkgutil
 import io
-
+import pymaster as nmt
+import healpy as hp
 
 def wfactor(n,mask,sht=True,pmap=None,equal_area=False):
     """
@@ -90,13 +91,20 @@ def cosine_apodize(bmask,width_deg):
 
 def test_recover_tensor_Bmode():
     # Sim config ---
-    res = 4.0 / 60. # deg
+
+    # from orphics import maps
+    # mask = maps.cosine_apodize(enmap.downgrade(enmap.read_map('/data5/act/masks/dr6v4_lensing_20250318_masks/baseline/dr6v4_lensing_20251803_night_enhanced_mask_70.fits'),16), 3.)
+    # shape,wcs = mask.shape,mask.wcs
+    
+    res = 8.0 / 60. # deg
+    nside = 512
     shape, wcs = enmap.fullsky_geometry(res=np.deg2rad(res))
-    lmax = 1000
+    lmax = 3*nside
     area_deg2 = 4000.
     apod_deg = 10.0
     radius_deg = np.sqrt(area_deg2 / np.pi)
     radius_rad = np.deg2rad(radius_deg)
+    np.random.seed(10)
 
     # Load CMB Cls ---
     ps, ells = load_test_spectra()
@@ -108,23 +116,41 @@ def test_recover_tensor_Bmode():
     ells = np.arange(bb_orig.size)
     ee_orig = cs.alm2cl(alm[1])
     polmap = cs.alm2map(alm[1:], enmap.empty((2,)+shape, wcs,dtype=np.float32), spin=2)  # only Q,U
+    hmap = hp.alm2map(alm,nside,pol=True)
+    Qh = hmap[1]
+    Uh = hmap[2]
     Q = polmap[0].copy()
     U = polmap[1].copy()
 
-    # Make apodized circular mask of 100 deg² ---
+    # Make apodized circular mask
     modrmap = enmap.modrmap(shape,wcs)
     bmask = enmap.zeros(shape,wcs)
     bmask[modrmap<radius_rad] = 1
-    mask = cosine_apodize(bmask,apod_deg)
+    dist      = enmap.distance_transform(bmask == 1)
+    mask = np.clip(dist / np.deg2rad(apod_deg), 0, 1)
+    mask = 0.5 - 0.5*np.cos(np.pi * mask)   # raised-cosine window
+
+
+    maskh = reproject.map2healpix(mask, nside=nside , method="spline", order=1, extensive=False)
 
     # Mode decoupling
     mask_alm = cs.map2alm(mask, lmax=2 * lmax)
-    bin_edges = np.append([2,10,20], np.arange(40,lmax,10))
-    bcents = (bin_edges[1:]+bin_edges[:-1])/2.
+
+    # Binning
+    b = nmt.NmtBin.from_nside_linear(nside, 16)
+    leff = b.get_effective_ells()
+    nbins = leff.size
+    bin_edges = []
+    for i in range(nbins):
+        bin_edges.append(b.get_ell_min(i))
+    bin_edges.append(b.get_ell_max(nbins-1))
+
+    # bin_edges = np.append([2,10,20], np.arange(40,lmax,10))
+    bcents = leff #(bin_edges[1:]+bin_edges[:-1])/2.
     
 
     masked = polmap*mask
-    # from orphics import io as oio
+    from orphics import io as oio
     # oio.hplot(masked,'masked',grid=True,colorbar=True,downgrade=4,ticks=30,mask = 0)
     # oio.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
 
@@ -137,6 +163,25 @@ def test_recover_tensor_Bmode():
     ee_masked = ee_masked / w2
 
     # Run purification ---
+
+    def compute_master(f_a, f_b, wsp):
+        cl_coupled = nmt.compute_coupled_cell(f_a, f_b)
+        cl_decoupled = wsp.decouple_cell(cl_coupled)
+        return cl_decoupled
+
+    with bench.show("pure namaster"):
+        f2yp = nmt.NmtField(maskh, [Qh, Uh], purify_e=False, purify_b=True,n_iter=0)
+        w_yp = nmt.NmtWorkspace.from_fields(f2yp, f2yp, b)
+        cl_yp_nmt = compute_master(f2yp, f2yp, w_yp)
+        cl_p_bb = cl_yp_nmt[3]
+
+        
+        f2np = nmt.NmtField(maskh, [Qh, Uh], purify_e=False, purify_b=False,n_iter=0)
+        w_np = nmt.NmtWorkspace.from_fields(f2np, f2np, b)
+        cl_np_nmt = compute_master(f2np, f2np, w_np)
+        cl_np_ee = cl_np_nmt[2]
+        
+
     
     pureE, pureB = pywiggle.get_pure_EB_alms(Q, U, mask,lmax=lmax)
     # pureE2, pureB2 = pywiggle.get_pure_EB_alms(Q*mask, U*mask, mask,masked_on_input=True,lmax=lmax)
@@ -146,7 +191,20 @@ def test_recover_tensor_Bmode():
     ialms[1] = pureB # impure E, pure B
     w = pywiggle.Wiggle(lmax, bin_edges=bin_edges)
     w.add_mask('m', mask_alm)
+    Mm_np = w.get_coupling_matrix_from_ids('m','m','--',npure=0)
+    Mm_p = w.get_coupling_matrix_from_ids('m','m','--',npure=1)
+
+    oio.plot_img(Mm_np,'impureMm.png')
+    oio.plot_img(Mm_p,'pureMm.png')
+
+    Mp_np = w.get_coupling_matrix_from_ids('m','m','++',npure=0)
+    Mp_p = w.get_coupling_matrix_from_ids('m','m','++',npure=1)
+
+    oio.plot_img(Mp_np,'impureMp.png')
+    oio.plot_img(Mp_p,'pureMp.png')
+    
     ret = w.decoupled_cl(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
+    
     cl_EE = ret['EE']['Cls']
     cl_BB = ret['BB']['Cls']
     
@@ -176,6 +234,8 @@ def test_recover_tensor_Bmode():
     plt.plot(ell, bpow, label='Recovered pure B')
     plt.plot(bcents,cl_BB, label = 'Decoupled pure B', marker='d', ls='none')
     plt.plot(bcents,icl_BB, label = 'Decoupled impure B', marker='o', ls='none')
+    plt.plot(leff,cl_p_bb, label = 'Decoupled pure B (Nmt)', marker='x', ls='none')
+    
     # plt.plot(oell, obpow, label='Recovered pure B (masked on input)')
     plt.xlim(2, 300)
     plt.yscale('log')
@@ -185,7 +245,7 @@ def test_recover_tensor_Bmode():
     plt.title(f'B-mode recovery test ({area_deg2:.0f} deg$^2$ mask)')
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('bmodes.png')
+    plt.savefig('bmodes.png',dpi=200)
 
     plt.figure()
     ell = np.arange(len(epow))
@@ -195,6 +255,8 @@ def test_recover_tensor_Bmode():
     plt.plot(ell, epow, label='Recovered pure E')
     # plt.plot(oell, oepow, label='Recovered pure E (masked on input)')
     plt.plot(bcents,icl_EE, label = 'Decoupled impure E', marker='o', ls='none')
+    plt.plot(bcents+1,cl_EE, label = 'Decoupled impure E, purified B', marker='o', ls='none')
+    plt.plot(leff,cl_np_ee, label = 'Decoupled impure E (Nmt)', marker='x', ls='none')
     plt.xlim(2, 300)
     plt.yscale('log')
     plt.xlabel(r'$\ell$')
@@ -203,4 +265,4 @@ def test_recover_tensor_Bmode():
     plt.title(f'E-mode recovery test ({area_deg2:.0f} deg$^2$ mask)')
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('emodes.png')
+    plt.savefig('emodes.png',dpi=200)

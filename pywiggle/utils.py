@@ -21,6 +21,7 @@ def multipole_to_bin_indices(lmax, bin_edges):
     Returns:
     - bin_indices: np.ndarray of shape (lmax + 1,), where bin_indices[l] gives the bin index for multipole l
     """
+    bin_edges = np.asarray(bin_edges)
     if bin_edges.min()<0: raise ValueError
     if bin_edges.max()>(lmax+1): raise ValueError
     if np.any(np.diff(bin_edges)<=0): raise ValueError("Bin edges must be monotonically increasing.")

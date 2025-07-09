@@ -93,9 +93,22 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 		> import numpy as np
 
 		> lmax = 4000
-		> bin_edges = np.arange(40,lmax,40)
-		
-		> dcls, th_filt = pywiggle.alm2auto_power_spin0(lmax,alm,mask_alm,bin_edges = bin_edges)
+		> bin_edges = np.arange(40,lmax,40) # Choose bin edges
+
+		# Initialize wiggle
+		> w = Wiggle(lmax, bin_edges=bin_edges)
+		# Register the SHT of a mask and identify it with a key
+		> w.add_mask('mt1', mask_alm_t1)
+		# Register another mask
+		> w.add_mask('mt2', mask_alm_p2)
+		# Register a beam to deconvolve from both fields
+		> w.add_beam('b1', beam_fl)
+		# Get the decoupled cross-Cls from the masked field SHTs
+		> ret_TT = w.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2',
+		                          return_theory_filter=False,
+		     			  beam_id1='b1', beam_id2='b1')
+
+This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``decoupled_cl`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
 
 
 Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a matrix that can be dotted with a theory spectrum to obtain the binned theory to compare the power spectrum to (e.g. for inference):
@@ -118,27 +131,12 @@ Cached workflow
 
 The above functions are convenience wrappers around the core class ``Wiggle``, which can be used directly if speed and efficient re-use of cached mode-coupling matrices is important. For example,
 
-.. code-block:: python
-		
-		> w = Wiggle(lmax, bin_edges=bin_edges)
-		# Register the SHT of a mask and identify it with a key
-		> w.add_mask('mt1', mask_alm_t1)
-		# Register another mask
-		> w.add_mask('mt2', mask_alm_p2)
-		# Register a beam to deconvolve from both fields
-		> w.add_beam('b1', beam_fl)
-		# Get the decoupled cross-Cls from the masked field SHTs
-		> ret_TT = w.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2', spectype='TT',
-		                          return_theory_filter=False,
-		     			  beam_id1='b1', beam_id2='b1')
-
-This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``decoupled_cl`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
 
 
 Coming soon
 ~~~~~~~~~~~
 
-TB and EB spectra as well as mode-decoupling for purified E/B fiels have not been implemented yet, but will be in a future release.
+Mode-decoupling for purified E/B fiels have not been implemented yet, but will be in a future release.
 
 
 Contributions

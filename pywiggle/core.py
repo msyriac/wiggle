@@ -201,7 +201,7 @@ class Wiggle(object):
         return M
     
     def get_coupling_matrix_from_ids(self,mask_id1,mask_id2,spintype,bin_weight_id=None,
-                                          beam_id1=None,beam_id2=None,npure=0):
+                                          beam_id1=None,beam_id2=None, pure_E=False,pure_B=False):
         """
         Compute the mode-coupling matrix for a given pair of masks and spin configuration.
 
@@ -260,11 +260,11 @@ class Wiggle(object):
                 return (g1+g2)/2.
             elif spintype=='--':
                 return (g1-g2)/2.
-        elif spintype=='20':
-            if npure==0:
-                return f(2,0,'+',None)
-            else:
+        elif spintype[:2]=='20':
+            if (('E' in spintype) and pure_E) or (('B' in spintype) and pure_B)
                 return f(0,0,'+',1)
+            else:
+                return f(2,0,'+',None)
         elif spintype=='22':
             Mpp = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,'++',bin_weight_id=bin_weight_id,
                                           beam_id1=beam_id1,beam_id2=beam_id2)
@@ -449,9 +449,9 @@ class Wiggle(object):
 
     @cache
     def _get_cinv(self,mask_id1,mask_id2,spintype,bin_weight_id,
-                  beam_id1,beam_id2,npure=0):
+                  beam_id1,beam_id2, pure_E=False,pure_B=False):
         mcm = self.get_coupling_matrix_from_ids(mask_id1,mask_id2,spintype=spintype,
-                                                 beam_id1=beam_id1,beam_id2=beam_id2,bin_weight_id=bin_weight_id,npure=npure)
+                                                 beam_id1=beam_id1,beam_id2=beam_id2,bin_weight_id=bin_weight_id, pure_E=pure_E,pure_B=pure_B)
         cinv = np.linalg.inv(mcm)
         return cinv
     
@@ -660,7 +660,6 @@ class Wiggle(object):
         else:
             raise ValueError
         
-        npure = sum([pure_E,pure_B]) # number of purified fields
             
         if mask_ids2 is None: mask_ids2 = mask_ids1
         if isinstance(mask_ids1,str): mask_ids1 = [mask_ids1]*2
@@ -671,7 +670,7 @@ class Wiggle(object):
         decfunc = lambda cls,spintype,m1,m2: self._core_decoupled_cl(cls, m1, mask_id2=m2, spintype=spintype,
                                                            bin_weight_id = bin_weight_id,
                                                            beam_id1 = beam_id1, beam_id2 = beam_id2,
-                                                                return_theory_filter=return_theory_filter, npure=npure)
+                                                                return_theory_filter=return_theory_filter, pure_E=pure_E,pure_B=pure_B)
         # Unity bin weights if none specified
         if self._binned and (bin_weight_id is None):
             self._populate_unity_bins()
@@ -687,14 +686,14 @@ class Wiggle(object):
         if '+' in spin:
             # Get TE
             cls_te = bfunc(alm2cl(alms1[0], alms2[1]))
-            ret_cls['TE'] = decfunc(cls_te,'20',mask_ids1[0],mask_ids2[1])
+            ret_cls['TE'] = decfunc(cls_te,'20_E',mask_ids1[0],mask_ids2[1])
             cls_et = bfunc(alm2cl(alms1[1], alms2[0]))
-            ret_cls['ET'] = decfunc(cls_et,'20',mask_ids1[1],mask_ids2[0])
+            ret_cls['ET'] = decfunc(cls_et,'20_E',mask_ids1[1],mask_ids2[0])
             # Get TB
             cls_tb = bfunc(alm2cl(alms1[0], alms2[2]))
-            ret_cls['TB'] = decfunc(cls_tb,'20',mask_ids1[0],mask_ids2[1])
+            ret_cls['TB'] = decfunc(cls_tb,'20_B',mask_ids1[0],mask_ids2[1])
             cls_bt = bfunc(alm2cl(alms1[2], alms2[0]))
-            ret_cls['BT'] = decfunc(cls_bt,'20',mask_ids1[1],mask_ids2[0])
+            ret_cls['BT'] = decfunc(cls_bt,'20_B',mask_ids1[1],mask_ids2[0])
         if 'P' in spin:
             # Get EE
             cls_ee = bfunc(alm2cl(alms1[1+idoff], alms2[1+idoff]))
@@ -730,14 +729,14 @@ class Wiggle(object):
     def _core_decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
                            bin_weight_id = None,
                            beam_id1 = None, beam_id2 = None,
-                           return_theory_filter=False, npure = 0):
+                           return_theory_filter=False, pure_E=False,pure_B=False):
 
-        if spintype not in ['00','20','22']: raise NotImplementedError
+        if spintype not in ['00','20_B','20_E','22']: raise NotImplementedError
                 
         # Get MCM
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,
                               bin_weight_id=bin_weight_id,
-                              beam_id1=beam_id1,beam_id2=beam_id2,npure=npure)
+                              beam_id1=beam_id1,beam_id2=beam_id2, pure_E=pure_E,pure_B=pure_B)
         # Decouple
         dcls = np.dot(cinv,pcls)
 
@@ -751,7 +750,7 @@ class Wiggle(object):
     
 
 def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = None,bin_weights = None,
-                                      beam_fl1 = None,beam_fl2 = None, npure=0,
+                                      beam_fl1 = None,beam_fl2 = None, , pure_E=False,pure_B=False,
                                       return_obj=False):
     r"""
     Compute the  (optionally, binned) mode-coupling matrix from the pseudo-Cl of a sky mask.
@@ -816,7 +815,7 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
     else:
         beam_id2 = None
     m = g.get_coupling_matrix_from_ids('m1','m1',spintype=spintype,bin_weight_id='b1',
-                                       beam_id1=beam_id1,beam_id2=beam_id2,npure=npure)
+                                       beam_id1=beam_id1,beam_id2=beam_id2, pure_E=pure_E,pure_B=pure_B)
     if return_obj:
         return m,g
     return m

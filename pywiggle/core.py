@@ -107,9 +107,9 @@ class Wiggle(object):
 
     def _zeros(self,):
         if self._binned:
-            return np.zeros((self.nbins,self.nbins))
+            return np.zeros((self.nbins,self.nbins),dtype=np.float64)
         else:
-            return np.zeros((self.lmax+1,self.lmax+1))
+            return np.zeros((self.lmax+1,self.lmax+1),dtype=np.float64)
         
     @cache
     def _get_corr(self,mask_id1,mask_id2,parity):
@@ -250,6 +250,9 @@ class Wiggle(object):
                                                     bin_weight_id=bin_weight_id,
                                                     beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
 
+        return self._Mmatrix(spintype,f,pure_E,pure_B)
+
+    def _Mmatrix(self,spintype,f,pure_E,pure_B):
         def Mp(npure):
             if npure==0:
                 g1 = f(2,2,'+',None)
@@ -324,7 +327,7 @@ class Wiggle(object):
         
         
     @cache
-    def get_theory_filter(self,mask_id1,mask_id2=None,spintype='00',bin_weight_id=None,beam_id1=None,beam_id2=None):
+    def get_theory_filter(self,mask_id1,mask_id2=None,spintype='00',bin_weight_id=None,beam_id1=None,beam_id2=None,pure_E=False,pure_B=False):
         r"""
         Construct the theoretical bandpower filter :math:`\mathcal{F}^{s_as_b}_{q\ell}`,
         as defined in arxiv:1809.09603.
@@ -379,26 +382,8 @@ class Wiggle(object):
         if mask_id2 is None: mask_id2 = mask_id1
         f = lambda spin1, spin2, parity: self._thfilt_core(mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id=bin_weight_id,
                                                       beam_id1=beam_id1,beam_id2=beam_id2)
-        if spintype=='00':
-            Mc = f(0,0,'+')
-        elif spintype=='22':
-            Mc1 = f(2,2,'+')
-            Mc2 = f(2,2,'-')
-            Mpp = (Mc1+Mc2)/2.
-            Mmm = (Mc1-Mc2)/2.
 
-            zero = np.zeros_like(Mpp)
-
-            Mc = np.block([
-                [ Mpp,     zero,   zero,   Mmm  ],
-                [ zero,   Mpp,    -Mmm,     zero],
-                [ zero,  -Mmm,     Mpp,     zero],
-                [ Mmm,     zero,   zero,   Mpp  ]
-            ])
-            
-        elif spintype=='20':
-            Mc = f(2,0,'+')
-
+        Mc = self._Mmatrix(spintype,f,pure_E,pure_B)
             
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,bin_weight_id=bin_weight_id,
                               beam_id1=beam_id1,beam_id2=beam_id2)
@@ -756,7 +741,8 @@ class Wiggle(object):
         if return_theory_filter:
             ret['Th'] = self.get_theory_filter(mask_id1,mask_id2,spintype=spintype,
                                                bin_weight_id=bin_weight_id,
-                                               beam_id1=beam_id1,beam_id2=beam_id2)
+                                               beam_id1=beam_id1,beam_id2=beam_id2,
+                                               pure_E=pure_E,pure_B=pure_B)
         return ret
     
 
@@ -1511,7 +1497,7 @@ def alm2cross_power_spin02(lmax, alm_t1, alm_e1, alm_b1, alm_t2, alm_e2, alm_b2,
 
 
 def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
-           return_mask=False, lmax=None, is_healpix=False,
+           return_mask=False, lmax=None,
            eps=1e-4):
 
     """
@@ -1540,12 +1526,8 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
         instead of the pure E/B multipoles. Useful for debugging.
         Default is False.
     lmax : int or None, optional
-        Maximum multipole to compute. If None, defaults to:
-        - `3*nside - 1` for Healpix inputs
-        - Half the Nyquist limit for enmap inputs
-    is_healpix : bool, optional
-        Whether the input maps are in HEALPix format. If False, assumes
-        enmap geometry. Default is True.
+        Maximum multipole to compute. If None, defaults to half the Nyquist
+        limit of the map.
     tiny : float, optional
         Threshold below which mask values are treated as zero to avoid
         division by very small values. Default is 1e-4.
@@ -1601,16 +1583,13 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
         Q = Qmap
         U = Umap
 
-    # Choose geometry and lmax
-    if is_healpix:
-        nside = hp.npix2nside(mask.size)
-        lmax  = int(3*nside - 1) if lmax is None else int(lmax)
-        map2alm, alm2map = cs.map2alm_healpix, cs.alm2map_healpix
-        template = np.zeros((2, mask.size))
+    slmax = int(np.min(np.pi / Q.pixshape() / 2))
+    if lmax is None:
+        lmax = slmax
     else:
-        lmax = int(np.min(np.pi / Q.pixshape() / 2)) if lmax is None else int(lmax)
-        map2alm, alm2map = cs.map2alm, cs.alm2map
-        template = enmap.zeros((2,) + Q.shape, wcs=Q.wcs)
+        if lmax>slmax: warnings.warn(f"Your pixelization supports lmax={slmax} but you have requested {lmax}. You will likely have excess power on large scales! E/B purification requires accurate SHTs, so an lmax of pi/pix_size/2 is recommended.")
+    map2alm, alm2map = cs.map2alm, cs.alm2map
+    template = enmap.zeros((2,) + Q.shape, wcs=Q.wcs,dtype=np.float64)
 
     ainfo = cs.alm_info(lmax)
     ells  = np.arange(lmax+1, dtype=np.float64)
@@ -1658,3 +1637,5 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
     pureB_alms  = ainfo.lmul(pureB_alms, killMD)
 
     return pureE_alms, pureB_alms
+
+

@@ -1,6 +1,7 @@
 import numpy as np
 from . import _wiggle
 import os
+import pkgutil, io
 
 
 """
@@ -227,6 +228,119 @@ def bin_square_matrix(matrix,bin_edges,lmax,bin_weights=None,bin_weights2=None):
     else:
         nbins, bin_indices, nweights, nweights2 = _prepare_bins(bin_edges,bin_weights,lmax,bin_weights2=bin_weights2)
     return _wiggle.bin_matrix(matrix,bin_indices,bin_indices,nweights,nweights2,nbins,nbins)
+
+def wfactor(n,mask,sht=True,pmap=None,equal_area=False):
+    """
+    Copied from msyriac/orphics/maps.py
+    
+    Approximate correction to an n-point function for the loss of power
+    due to the application of a mask.
+
+    For an n-point function using SHTs, this is the ratio of 
+    area weighted by the nth power of the mask to the full sky area 4 pi.
+    This simplifies to mean(mask**n) for equal area pixelizations like
+    healpix. For SHTs on CAR, it is sum(mask**n * pixel_area_map) / 4pi.
+    When using FFTs, it is the area weighted by the nth power normalized
+    to the area of the map. This also simplifies to mean(mask**n)
+    for equal area pixels. For CAR, it is sum(mask**n * pixel_area_map) 
+    / sum(pixel_area_map).
+
+    If not, it does an expensive calculation of the map of pixel areas. If this has
+    been pre-calculated, it can be provided as the pmap argument.
+    
+    """
+    from pixell import enmap
+    assert mask.ndim==1 or mask.ndim==2
+    if pmap is None: 
+        if equal_area:
+            npix = mask.size
+            pmap = 4*np.pi / npix if sht else enmap.area(mask.shape,mask.wcs) / npix
+        else:
+            pmap = enmap.pixsizemap(mask.shape,mask.wcs)
+    return np.sum((mask**n)*pmap) /np.pi / 4. if sht else np.sum((mask**n)*pmap) / np.sum(pmap)
+
+def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.1):
+    """
+    Returns CMB Cls [TT, EE, BB, TE] from CAMB with low accuracy for fast testing.
+    This function is included for completeness to show how the power spectra used
+    in this test were generated.
+
+    >> ps = get_camb_spectra(lmax=lmax, r=0.05)  # r sets BB amplitude
+    >> ells = np.arange(ps.shape[-1])
+    >> np.savez_compressed("pywiggle/data/test_camb_cl.npz", ps=ps, ells=ells)
+    
+    """
+    import camb
+    from camb import model
+    
+    pars = camb.CAMBparams()
+    pars.set_cosmology(H0=67.5, ombh2=0.022, omch2=0.122)
+    pars.InitPower.set_params(As=As, ns=ns, r=r)
+    pars.set_for_lmax(lmax, lens_potential_accuracy=1)
+    pars.WantTensors = tensor
+    pars.AccuracyBoost = 0.1
+    pars.lAccuracyBoost = 0.1
+    pars.HighAccuracyDefault = False
+
+    results = camb.get_results(pars)
+    cls = results.get_total_cls(lmax=lmax,CMB_unit='muK')
+
+    # cls has shape (lmax+1, 4): TT, EE, BB, TE
+    ps = np.zeros((3, 3, lmax+1))
+    ps[0, 0] = cls[:, 0]  # TT
+    ps[1, 1] = cls[:, 1]  # EE
+    ps[2, 2] = cls[:, 2]  # BB
+    ps[0, 1] = ps[1, 0] = cls[:, 3]  # TE
+
+    return ps
+
+def load_test_spectra():
+    """
+    Load CAMB test Cls from bundled .npz file using pkgutil (compatible with editable installs).
+    """
+    data = pkgutil.get_data("pywiggle", "data/test_camb_cl.npz")
+    if data is None:
+        raise FileNotFoundError("Could not load 'data/test_camb_cl.npz' from package.")
+    with io.BytesIO(data) as f:
+        npz = np.load(f)
+        return npz["ps"], npz["ells"]
+
+
+def cosine_apodize(bmask,width_deg):
+    r = width_deg * np.pi / 180.
+    return 0.5*(1-np.cos(bmask.distance_transform(rmax=r)*(np.pi/r)))
+
+
+def get_mask(nside,shape,wcs,radius_deg,apo_width_deg,smooth_deg=None,lon_c = 0.0, lat_c = 0.0, hp_file=None):
+    # centre on the equator by default
+    import healpy as hp
+    import pymaster as nmt
+    from pixell import reproject
+
+    if hp_file is None:
+        # 3-vector that points to the disc centre
+        vec  = hp.ang2vec(lon_c, lat_c, lonlat=True)
+
+        # Pixels that fall inside the hard (binary) disc
+        pix_disc = hp.query_disc(nside, vec,
+                                 np.radians(radius_deg), inclusive=True)
+
+        # Build the binary mask
+        npix       = hp.nside2npix(nside)
+        mask_bin   = np.zeros(npix, dtype=np.float32)
+        mask_bin[pix_disc] = 1.0
+
+        if smooth_deg:
+            mask_bin = hp.smoothing(mask_bin,np.deg2rad(smooth_deg))
+
+        # C1-apodise it with NaMaster
+        mask_C1 = nmt.mask_apodization(mask_bin,
+                                       apo_width_deg,
+                                       apotype="C1")
+    else:
+        mask_C1 = hp.read_map(hp_file)
+    mask_C1_rect = reproject.healpix2map(mask_C1,shape,wcs,method='spline',order=1)
+    return mask_C1,mask_C1_rect
 
 """
 =========

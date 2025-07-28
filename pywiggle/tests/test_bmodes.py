@@ -1,138 +1,40 @@
 import numpy as np
 from pixell import enmap, enplot, curvedsky as cs, utils, bench,reproject
 import matplotlib.pyplot as plt
-import pywiggle 
-import pkgutil
+from pywiggle import utils as wutils
+import pywiggle
 import io,sys
 import pymaster as nmt
 import healpy as hp
 from orphics import maps, io as oio
 from collections import defaultdict
 
-def wfactor(n,mask,sht=True,pmap=None,equal_area=False):
-    """
-    Copied from msyriac/orphics/maps.py
-    
-    Approximate correction to an n-point function for the loss of power
-    due to the application of a mask.
-
-    For an n-point function using SHTs, this is the ratio of 
-    area weighted by the nth power of the mask to the full sky area 4 pi.
-    This simplifies to mean(mask**n) for equal area pixelizations like
-    healpix. For SHTs on CAR, it is sum(mask**n * pixel_area_map) / 4pi.
-    When using FFTs, it is the area weighted by the nth power normalized
-    to the area of the map. This also simplifies to mean(mask**n)
-    for equal area pixels. For CAR, it is sum(mask**n * pixel_area_map) 
-    / sum(pixel_area_map).
-
-    If not, it does an expensive calculation of the map of pixel areas. If this has
-    been pre-calculated, it can be provided as the pmap argument.
-    
-    """
-    assert mask.ndim==1 or mask.ndim==2
-    if pmap is None: 
-        if equal_area:
-            npix = mask.size
-            pmap = 4*np.pi / npix if sht else enmap.area(mask.shape,mask.wcs) / npix
-        else:
-            pmap = enmap.pixsizemap(mask.shape,mask.wcs)
-    return np.sum((mask**n)*pmap) /np.pi / 4. if sht else np.sum((mask**n)*pmap) / np.sum(pmap)
 
 
-def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.1):
-    """
-    Returns CMB Cls [TT, EE, BB, TE] from CAMB with low accuracy for fast testing.
-    This function is included for completeness to show how the power spectra used
-    in this test were generated.
 
-    >> ps = get_camb_spectra(lmax=lmax, r=0.05)  # r sets BB amplitude
-    >> ells = np.arange(ps.shape[-1])
-    >> np.savez_compressed("pywiggle/data/test_camb_cl.npz", ps=ps, ells=ells)
-    
-    """
-    import camb
-    from camb import model
-    
-    pars = camb.CAMBparams()
-    pars.set_cosmology(H0=67.5, ombh2=0.022, omch2=0.122)
-    pars.InitPower.set_params(As=As, ns=ns, r=r)
-    pars.set_for_lmax(lmax, lens_potential_accuracy=0)
-    pars.WantTensors = tensor
-    pars.AccuracyBoost = 0.1
-    pars.lAccuracyBoost = 0.1
-    pars.HighAccuracyDefault = False
-
-    results = camb.get_results(pars)
-    cls = results.get_total_cls(lmax=lmax,CMB_unit='muK')
-
-    # cls has shape (lmax+1, 4): TT, EE, BB, TE
-    ps = np.zeros((3, 3, lmax+1))
-    ps[0, 0] = cls[:, 0]  # TT
-    ps[1, 1] = cls[:, 1]  # EE
-    ps[2, 2] = cls[:, 2]  # BB
-    ps[0, 1] = ps[1, 0] = cls[:, 3]  # TE
-
-    return ps
-
-
-def load_test_spectra():
-    """
-    Load CAMB test Cls from bundled .npz file using pkgutil (compatible with editable installs).
-    """
-    data = pkgutil.get_data("pywiggle", "data/test_camb_cl.npz")
-    if data is None:
-        raise FileNotFoundError("Could not load 'data/test_camb_cl.npz' from package.")
-    with io.BytesIO(data) as f:
-        npz = np.load(f)
-        return npz["ps"], npz["ells"]
-
-
-def cosine_apodize(bmask,width_deg):
-    r = width_deg * np.pi / 180.
-    return 0.5*(1-np.cos(bmask.distance_transform(rmax=r)*(np.pi/r)))
-
-
-def get_mask(nside,shape,wcs,radius_deg,apo_width_deg,lon_c = 0.0, lat_c = 0.0):
-    # centre on the equator by default
-
-    # 3-vector that points to the disc centre
-    vec  = hp.ang2vec(lon_c, lat_c, lonlat=True)
-
-    # Pixels that fall inside the hard (binary) disc
-    pix_disc = hp.query_disc(nside, vec,
-                             np.radians(radius_deg), inclusive=True)
-
-    # Build the binary mask
-    npix       = hp.nside2npix(nside)
-    mask_bin   = np.zeros(npix, dtype=np.float32)
-    mask_bin[pix_disc] = 1.0
-
-    # C1-apodise it with NaMaster
-    mask_C1 = nmt.mask_apodization(mask_bin,
-                                   apo_width_deg,
-                                   apotype="C1")
-    mask_C1_rect = reproject.healpix2map(mask_C1,shape,wcs,method='spline',order=1)
-    return mask_C1,mask_C1_rect
 
 
 def test_recover_tensor_Bmode():
     # Sim config ---
 
-    res = 8.0 / 60. # deg
-    nside = 512
+    res = 16.0 / 60. # deg
+    beam = res * 60. * 2 #arcmin
+    nside = 256
     shape, wcs = enmap.fullsky_geometry(res=np.deg2rad(res))
     lmax = 3*nside
     mlmax = 2*nside
     hpixdiv = 2
     cardiv = 2
+    nsims = 10
 
     area_deg2 = 4000.
     apod_deg = 10.0
+    smooth_deg = 10.0
     radius_deg = np.sqrt(area_deg2 / np.pi)
     radius_rad = np.deg2rad(radius_deg)
 
     # Load CMB Cls ---
-    ps, ells = load_test_spectra()
+    ps, ells = wutils.load_test_spectra()
     assert ps.shape == (3, 3, len(ells))
 
     def compute_master(f_a, f_b, wsp):
@@ -150,8 +52,8 @@ def test_recover_tensor_Bmode():
     # mask = 0.5 - 0.5*np.cos(np.pi * mask)   # raised-cosine window
     # maskh = reproject.map2healpix(mask, nside=nside , method="spline", order=1, extensive=False)
 
-    maskh, mask = get_mask(nside,shape,wcs,radius_deg,apod_deg)
-    #oio.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
+    maskh, mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg)#hp_file="/home1/mathm/repos/wiggle/analysis_mask_apo10_C1_nside256.fits")
+    oio.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
     
     # Mode decoupling
     mask_alm = cs.map2alm(mask, lmax=2 * mlmax)
@@ -168,10 +70,9 @@ def test_recover_tensor_Bmode():
 
     # bin_edges = np.append([2,10,20], np.arange(40,lmax,10))
     bcents = leff #(bin_edges[1:]+bin_edges[:-1])/2.
-    w2 = wfactor(2,mask)
+    w2 = wutils.wfactor(2,mask)
     
     
-    nsims = 40
     results = defaultdict(list)
     
     for i in range(nsims):
@@ -179,10 +80,16 @@ def test_recover_tensor_Bmode():
         # Simulate polarization map ---
         np.random.seed(i)
         alm = cs.rand_alm(ps, lmax=lmax)
+        
         if i==0:
             bb_orig = cs.alm2cl(alm[2])
             ells = np.arange(bb_orig.size)
             ee_orig = cs.alm2cl(alm[1])
+
+        # ls = np.arange(ps[0,0].size)
+        # for j in range(3):
+        #     alm[j] = cs.almxfl(alm[j],maps.gauss_beam(beam,ls))
+            
             
         polmap = cs.alm2map(alm[1:], enmap.empty((2,)+shape, wcs,dtype=np.float32), spin=2)  # only Q,U
         
@@ -304,7 +211,7 @@ def test_recover_tensor_Bmode():
         if key!="Wiggle BB impure decoupled (CAR)":
             pl.add(leff+i*3,errs[key]/errs["Wiggle BB impure decoupled (CAR)"],label=key,marker='o')
     pl.hline(y=1)
-    pl._ax.set_ylim(0.3,100.0)
+    pl._ax.set_ylim(0.05,20.0)
     pl._ax.set_xlim(2, 300)
     pl.done('berrrat.png')
 

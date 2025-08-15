@@ -19,7 +19,7 @@ wiggle
 ``wiggle`` stands for the WIGner Gauss-Legendre Estimator. This Python package provides a fast implementation of unbiased angular power spectrum estimation of spin-0 and spin-2 fields on the sphere, most commonly encountered in the context of cosmological data analysis. With an efficient and exact algorithm, this code performs mode-decoupling very fast; in the case of binned spectra, ``wiggle`` can be orders of magnitude faster than other approaches (often around one second of compute-time at most).
 
 
-⚠️  **Warning**: ``wiggle`` has only been tested for spin-0 (scalar) spectra so far. The spin-2 functionality is under active development.
+⚠️  **Warning**: ``wiggle`` is under active development! Its API will likely change.
 
 
 * Free software: BSD license
@@ -117,26 +117,6 @@ Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a
 .. code-block:: python
 		
 		> chisquare = get_chisquare(dcls,th_filt @ theory_cls,cinv)
-
-While the above function ``alm2auto_power_spin0`` is intended for the auto-spectra of a spin-0 field, many additional convenience functions are provided:
-
-* ``alm2cross_power_spin0``: Cross-power of spin-0 fields (:math:`T_1` x :math:`T_2`)
-* ``alm2auto_power_spin2``: Auto-power of E/B decomposition of spin-2 fields (EE and BB)
-* ``alm2auto_power_spin02``: Auto-power of scalar,E,B fields along with the scalar-E power (TT, EE, BB, TE)
-* ``alm2cross_power_spin2``: Cross-power of E/B decomposition of spin-2 fields (:math:`E_1` x :math:`E_2` and :math:`B_1` x :math:`B_2`)
-* ``alm2cross_power_spin02``: Cross-power of scalar,E/B fields along with the scalar-E power (:math:`T_1` x :math:`T_2`, :math:`E_1` x :math:`E_2` and :math:`B_1` x :math:`B_2`, :math:`T_1` x :math:`E_2`, :math:`T_2` x :math:`E_1`)
-
-Cached workflow
-~~~~~~~~~~~~~~~
-
-The above functions are convenience wrappers around the core class ``Wiggle``, which can be used directly if speed and efficient re-use of cached mode-coupling matrices is important. For example,
-
-
-
-Coming soon
-~~~~~~~~~~~
-
-Mode-decoupling for purified E/B fiels have not been implemented yet, but will be in a future release.
 
 
 Contributions

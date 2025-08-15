@@ -320,7 +320,7 @@ class Wiggle(object):
         return M
         
         
-    def get_theory_filter(self,mask_id1,mask_id2=None,spintype='00',bin_weight_id=None,beam_id1=None,beam_id2=None,pure_E=False,pure_B=False):
+    def get_theory_filter(self,mask_id1,mask_id2=None,spintype='00',bin_weight_id=None,pure_E=False,pure_B=False):
         r"""
         Construct the theoretical bandpower filter :math:`\mathcal{F}^{s_as_b}_{q\ell}`,
         as defined in arxiv:1809.09603.
@@ -342,6 +342,9 @@ class Wiggle(object):
             \sum_{q'} \left(\mathcal{M}^{s_as_b}\right)^{-1}_{qq'} 
             \sum_{\ell' \in \vec{\ell}_{q'}} w_{q'}^{\ell'} 
             \mathsf{M}^{s_as_b}_{\ell'\ell}.
+
+        The theory spectrum this filter is dotted with must *not* contain the beam, even if beams were
+        deconvolved during the Wiggle analysis.
 
 
         Parameters
@@ -371,15 +374,15 @@ class Wiggle(object):
 
         """
         
-        if not(self._binned): raise ValueError("No bin edges where specified when initializing Wiggle, so no theory filter can be determined.")
+        if not(self._binned): raise ValueError("No bin edges were specified when initializing Wiggle, so no theory filter can be determined.")
         if mask_id2 is None: mask_id2 = mask_id1
         f = lambda spin1, spin2, parity, gfact: self._thfilt_core(mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id=bin_weight_id,
-                                                             beam_id1=beam_id1,beam_id2=beam_id2, gfact=gfact)
+                                                             beam_id1=None,beam_id2=None, gfact=gfact)
 
         Mc = self._Mmatrix(spintype,f,pure_E,pure_B)
             
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,bin_weight_id=bin_weight_id,
-                              beam_id1=beam_id1,beam_id2=beam_id2)
+                              beam_id1=None,beam_id2=None)
         thfilt = np.einsum('ij,jk->ik', cinv, Mc, optimize='greedy')
         return thfilt
 
@@ -545,7 +548,7 @@ class Wiggle(object):
         beam smoothing, and bandpower binning. The result is a debiased, decoupled bandpower 
         estimate suitable for direct comparison with theoretical predictions. Note that
         a theory filter of shape (nbins,nells) needs to be applied to (nells,) shaped
-        theory spectra if using bandpower binning. This filter can be obtained from this
+        theory spectra (no beam) if using bandpower binning. This filter can be obtained from this
         function call, but is the most expensive part of the calculation, so consider
         obtaining it from `self.get_theory_filter` once.
 
@@ -735,7 +738,6 @@ class Wiggle(object):
         if return_theory_filter:
             ret['Th'] = self.get_theory_filter(mask_id1,mask_id2,spintype=spintype,
                                                bin_weight_id=bin_weight_id,
-                                               beam_id1=beam_id1,beam_id2=beam_id2,
                                                pure_E=pure_E,pure_B=pure_B)
         return ret
     

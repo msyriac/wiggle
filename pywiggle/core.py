@@ -304,14 +304,14 @@ class Wiggle(object):
             self._mask_cl_cache[f'{mask_id1}_{mask_id2}'] = alm2cl(self._mask_alm_cache[mask_id1],self._mask_alm_cache[mask_id2])
             return self._mask_cl_cache[f'{mask_id1}_{mask_id2}']
 
-    def _thfilt_core(self,mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id,beam_id1,beam_id2):
+    def _thfilt_core(self,mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id,beam_id1,beam_id2,gfact):
         if spin1==0 and spin2==0:
             ud = self.ud00
         elif spin1==2 and spin2==0:
             ud = self._get_wigner(2,0)
         elif spin1==2 and spin2==2:
             ud = self._get_wigner(2,2)
-        b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2) # (N x nbins)
+        b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact) # (N x nbins)
         xi = self._get_corr(mask_id1,mask_id2,parity=parity)
         W = self.w_mu * xi # (N,)
         b2w = self._get_G_term_weights(mode_count_weight=True,parity=parity,apply_bin_weights=False,bin_weight_id=None) # (nells,)
@@ -373,8 +373,8 @@ class Wiggle(object):
         
         if not(self._binned): raise ValueError("No bin edges where specified when initializing Wiggle, so no theory filter can be determined.")
         if mask_id2 is None: mask_id2 = mask_id1
-        f = lambda spin1, spin2, parity: self._thfilt_core(mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id=bin_weight_id,
-                                                      beam_id1=beam_id1,beam_id2=beam_id2)
+        f = lambda spin1, spin2, parity, gfact: self._thfilt_core(mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id=bin_weight_id,
+                                                             beam_id1=beam_id1,beam_id2=beam_id2, gfact=gfact)
 
         Mc = self._Mmatrix(spintype,f,pure_E,pure_B)
             

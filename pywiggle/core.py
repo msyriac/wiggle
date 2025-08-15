@@ -539,7 +539,7 @@ class Wiggle(object):
         else:
             return cls        
 
-    def decoupled_cl(self,alms1,alms2, mask_ids1, mask_ids2=None,
+    def get_powers(self,alms1,alms2, mask_ids1, mask_ids2=None,
                      bin_weight_id = None,
                      beam_id1 = None, beam_id2 = None, pure_E = False, pure_B = False,
                      return_theory_filter=False):
@@ -663,42 +663,36 @@ class Wiggle(object):
 
         
 
-        decfunc = lambda cls,spintype,m1,m2: self._core_decoupled_cl(cls, m1, mask_id2=m2, spintype=spintype,
+        decfunc = lambda cls,spintype,m1,m2: self.decoupled_cl(cls, m1, mask_id2=m2, spintype=spintype,
                                                            bin_weight_id = bin_weight_id,
                                                            beam_id1 = beam_id1, beam_id2 = beam_id2,
                                                                 return_theory_filter=return_theory_filter, pure_E=pure_E,pure_B=pure_B)
-        # Unity bin weights if none specified
-        if self._binned and (bin_weight_id is None):
-            self._populate_unity_bins()
-            bin_weight_id = _reserved_bin_id
-
-        bfunc = lambda cls: self._bin_if_needed(cls,bin_weight_id)
         
         ret_cls = {}
         if 'T' in spin:
             # Get TT
-            cls_tt = bfunc(alm2cl(alms1[0], alms2[0]))
+            cls_tt = alm2cl(alms1[0], alms2[0])
             ret_cls['TT'] = decfunc(cls_tt,'00',mask_ids1[0],mask_ids2[0])
         if '+' in spin:
             # Get TE
-            cls_te = bfunc(alm2cl(alms1[0], alms2[1]))
+            cls_te = alm2cl(alms1[0], alms2[1])
             ret_cls['TE'] = decfunc(cls_te,'20_E',mask_ids1[0],mask_ids2[1])
-            cls_et = bfunc(alm2cl(alms1[1], alms2[0]))
+            cls_et = alm2cl(alms1[1], alms2[0])
             ret_cls['ET'] = decfunc(cls_et,'20_E',mask_ids1[1],mask_ids2[0])
             # Get TB
-            cls_tb = bfunc(alm2cl(alms1[0], alms2[2]))
+            cls_tb = alm2cl(alms1[0], alms2[2])
             ret_cls['TB'] = decfunc(cls_tb,'20_B',mask_ids1[0],mask_ids2[1])
-            cls_bt = bfunc(alm2cl(alms1[2], alms2[0]))
+            cls_bt = alm2cl(alms1[2], alms2[0])
             ret_cls['BT'] = decfunc(cls_bt,'20_B',mask_ids1[1],mask_ids2[0])
         if 'P' in spin:
             # Get EE
-            cls_ee = bfunc(alm2cl(alms1[1+idoff], alms2[1+idoff]))
+            cls_ee = alm2cl(alms1[1+idoff], alms2[1+idoff])
             # Get EB
-            cls_eb = bfunc(alm2cl(alms1[1+idoff], alms2[2+idoff]))
+            cls_eb = alm2cl(alms1[1+idoff], alms2[2+idoff])
             # Get EB
-            cls_be = bfunc(alm2cl(alms1[2+idoff], alms2[1+idoff]))
+            cls_be = alm2cl(alms1[2+idoff], alms2[1+idoff])
             # Get BB
-            cls_bb = bfunc(alm2cl(alms1[2+idoff], alms2[2+idoff]))
+            cls_bb = alm2cl(alms1[2+idoff], alms2[2+idoff])
 
             cls_pol = np.concatenate([cls_ee, cls_eb,cls_be, cls_bb])
             ret = decfunc(cls_pol,'22',mask_ids1[1],mask_ids2[1])
@@ -722,12 +716,20 @@ class Wiggle(object):
 
             
         
-    def _core_decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
+    def decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
                            bin_weight_id = None,
                            beam_id1 = None, beam_id2 = None,
                            return_theory_filter=False, pure_E=False,pure_B=False):
 
         if spintype not in ['00','20_B','20_E','22']: raise NotImplementedError
+
+        # Unity bin weights if none specified
+        if self._binned and (bin_weight_id is None):
+            self._populate_unity_bins()
+            bin_weight_id = _reserved_bin_id
+
+        pcls = self._bin_if_needed(pcls,bin_weight_id)
+        
                 
         # Get MCM
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,

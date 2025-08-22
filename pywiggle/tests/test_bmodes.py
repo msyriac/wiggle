@@ -137,7 +137,7 @@ def test_recover_tensor_Bmode():
         ialms[1] = maps.change_alm_lmax(pureB,mlmax) # impure E, pure B
         w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges)
         w.add_mask('m', mask_alm)
-        ret = w.decoupled_cl(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
+        ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
 
         cl_EE = ret['EE']['Cls']
         cl_bb_wig_p = ret['BB']['Cls'].copy()

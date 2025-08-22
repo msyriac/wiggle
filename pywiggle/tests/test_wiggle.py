@@ -81,7 +81,7 @@ def test_power():
         alms = hp.map2alm(maps, lmax=LMAX, iter=0,pol=True)
 
 
-        ret = w.decoupled_cl(alms,alms, 'm',return_theory_filter=(i==0))
+        ret = w.get_powers(alms,alms, 'm',return_theory_filter=(i==0))
         cl_EE = ret['EE']['Cls']
         cl_TT = ret['TT']['Cls']
         if i==0:

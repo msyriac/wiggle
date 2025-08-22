@@ -18,7 +18,6 @@ dependencies = [
     'fastgl>=0.1.11',
     'scipy>=1.0',
     'threadpoolctl',
-    'pixell'    
      ]
 
 [project.optional-dependencies]
@@ -26,7 +25,8 @@ test = [
     'pytest-cov>=2.6',
     'coveralls>=1.5',
     'pytest>=4.6',
-    'ducc0'
+    'ducc0',
+    'pixell'    
 ]
 
 

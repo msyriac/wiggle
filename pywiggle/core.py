@@ -599,9 +599,9 @@ class Wiggle(object):
         spectra : dict
             Keys and shapes depend on the input polarisation:
 
-            * scalar–scalar → ``{'TT': {'Cls': (nbin | lmax+1,)}}``
-            * spin-2 only   → ``{'EE', 'EB', 'BE', 'BB'}``
-            * scalar+spin-2 → ``{'TT', 'TE', 'ET', 'TB', 'BT',
+            * scalar–scalar -> ``{'TT': {'Cls': (nbin | lmax+1,)}}``
+            * spin-2 only   -> ``{'EE', 'EB', 'BE', 'BB'}``
+            * scalar+spin-2 -> ``{'TT', 'TE', 'ET', 'TB', 'BT',
                                   'EE', 'EB', 'BE', 'BB'}``
 
             Each entry holds a dict with the field ``'Cls'`` containing the
@@ -869,7 +869,7 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
     -----
     - Requires the `pixell` library for spherical harmonic transforms and 
       map handling.
-    - This method suppresses E→B leakage caused by the mask, and
+    - This method suppresses E->B leakage caused by the mask, and
       is critical for detecting weak B-mode signals like those from 
       primordial gravitational waves.
     - Based on the formalism in:

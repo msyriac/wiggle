@@ -17,7 +17,8 @@ dependencies = [
      "healpy",
     'fastgl>=0.1.11',
     'scipy>=1.0',
-    'threadpoolctl'
+    'threadpoolctl',
+    'pixell'    
      ]
 
 [project.optional-dependencies]

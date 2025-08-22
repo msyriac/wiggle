@@ -239,7 +239,7 @@ class Wiggle(object):
             If an unsupported `spintype` is provided.
         """
         
-        if spintype not in ['00','20_E','20_B','22']: raise ValueError(f'spintype {spintype} not recognized')
+        if spintype not in ['00','20_E','20_B','22','+','-']: raise ValueError(f'spintype {spintype} not recognized')
         f = lambda spin1,spin2,parity,gfact: self._get_m(mask_id1,mask_id2,spin1=spin1,spin2=spin2,parity=parity,
                                                     bin_weight_id=bin_weight_id,
                                                     beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
@@ -266,6 +266,15 @@ class Wiggle(object):
                 return f(0,0,'+',1)
             else:
                 return f(2,0,'+',None)
+        elif spintype in ['+','-']:
+            # These are just used in tests
+            if pure_E or pure_B: raise ValueError
+            g1 = f(2,2,'+',None)
+            g2 = f(2,2,'-',None)
+            if spintype=='+':
+                return (g1+g2)/2.
+            elif spintype=='-':
+                return (g1-g2)/2.
         elif spintype=='22':
 
             zero = self._zeros()

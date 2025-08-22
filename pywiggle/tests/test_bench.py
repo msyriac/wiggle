@@ -91,9 +91,9 @@ class Benchmark(object):
             if spin==0:
                 mcm = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='00',bin_edges = bin_edges,bin_weights = bin_weights)
             elif spin==2:
-                mcm1, g = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='++',bin_edges = bin_edges,bin_weights = bin_weights, return_obj=True)
+                mcm1, g = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='+',bin_edges = bin_edges,bin_weights = bin_weights, return_obj=True)
                 mcm1 = mcm1
-                mcm2 = g.get_coupling_matrix_from_ids('m1','m1',spintype='--',bin_weight_id='b1',beam_id1=None,beam_id2=None)
+                mcm2 = g.get_coupling_matrix_from_ids('m1','m1',spintype='-',bin_weight_id='b1',beam_id1=None,beam_id2=None)
                 mcm = np.zeros((2,*mcm1.shape))
                 mcm[0] = mcm1
                 mcm[1] = mcm2

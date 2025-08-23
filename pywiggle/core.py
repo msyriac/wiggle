@@ -659,47 +659,51 @@ class Wiggle(object):
             spin = "T+P"
         else:
             raise ValueError
-        
             
         if mask_ids2 is None: mask_ids2 = mask_ids1
         if isinstance(mask_ids1,str): mask_ids1 = [mask_ids1]*2
         if isinstance(mask_ids2,str): mask_ids2 = [mask_ids2]*2
-
         
+        # Unity bin weights if none specified
+        if self._binned and (bin_weight_id is None):
+            self._populate_unity_bins()
+            bin_weight_id = _reserved_bin_id
 
-        decfunc = lambda cls,spintype,m1,m2: self.decoupled_cl(cls, m1, mask_id2=m2, spintype=spintype,
-                                                           bin_weight_id = bin_weight_id,
-                                                           beam_id1 = beam_id1, beam_id2 = beam_id2,
-                                                                return_theory_filter=return_theory_filter, pure_E=pure_E,pure_B=pure_B)
+        balm2cl = lambda a1,a2: self._bin_if_needed(alm2cl(a1,a2),bin_weight_id)
+        decfunc = lambda cls,spintype,m1,m2: self._decouple_binned_cl(cls, m1, mask_id2=m2, spintype=spintype,
+                                                          bin_weight_id = bin_weight_id,
+                                                          beam_id1 = beam_id1, beam_id2 = beam_id2,
+                                                          return_theory_filter=return_theory_filter, pure_E=pure_E,pure_B=pure_B)
         
         ret_cls = {}
         if 'T' in spin:
             # Get TT
-            cls_tt = alm2cl(alms1[0], alms2[0])
+            cls_tt = balm2cl(alms1[0], alms2[0])
             ret_cls['TT'] = decfunc(cls_tt,'00',mask_ids1[0],mask_ids2[0])
         if '+' in spin:
             # Get TE
-            cls_te = alm2cl(alms1[0], alms2[1])
+            cls_te = balm2cl(alms1[0], alms2[1])
             ret_cls['TE'] = decfunc(cls_te,'20_E',mask_ids1[0],mask_ids2[1])
-            cls_et = alm2cl(alms1[1], alms2[0])
+            cls_et = balm2cl(alms1[1], alms2[0])
             ret_cls['ET'] = decfunc(cls_et,'20_E',mask_ids1[1],mask_ids2[0])
             # Get TB
-            cls_tb = alm2cl(alms1[0], alms2[2])
+            cls_tb = balm2cl(alms1[0], alms2[2])
             ret_cls['TB'] = decfunc(cls_tb,'20_B',mask_ids1[0],mask_ids2[1])
-            cls_bt = alm2cl(alms1[2], alms2[0])
+            cls_bt = balm2cl(alms1[2], alms2[0])
             ret_cls['BT'] = decfunc(cls_bt,'20_B',mask_ids1[1],mask_ids2[0])
         if 'P' in spin:
             # Get EE
-            cls_ee = alm2cl(alms1[1+idoff], alms2[1+idoff])
+            cls_ee = balm2cl(alms1[1+idoff], alms2[1+idoff])
             # Get EB
-            cls_eb = alm2cl(alms1[1+idoff], alms2[2+idoff])
+            cls_eb = balm2cl(alms1[1+idoff], alms2[2+idoff])
             # Get EB
-            cls_be = alm2cl(alms1[2+idoff], alms2[1+idoff])
+            cls_be = balm2cl(alms1[2+idoff], alms2[1+idoff])
             # Get BB
-            cls_bb = alm2cl(alms1[2+idoff], alms2[2+idoff])
+            cls_bb = balm2cl(alms1[2+idoff], alms2[2+idoff])
 
             cls_pol = np.concatenate([cls_ee, cls_eb,cls_be, cls_bb])
             ret = decfunc(cls_pol,'22',mask_ids1[1],mask_ids2[1])
+
             if return_theory_filter: ret_cls['ThPol'] = ret['Th']
             # Unpack concatenated decoupled spectra
             rlist = ['EE','EB','BE','BB']
@@ -718,23 +722,31 @@ class Wiggle(object):
             
             
 
-            
-        
     def decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
                            bin_weight_id = None,
                            beam_id1 = None, beam_id2 = None,
                            return_theory_filter=False, pure_E=False,pure_B=False):
-
-        if spintype not in ['00','20_B','20_E','22']: raise NotImplementedError
-
+        # pcls must not be binned. This function is not suitable for spin!=0.
+            
         # Unity bin weights if none specified
         if self._binned and (bin_weight_id is None):
             self._populate_unity_bins()
             bin_weight_id = _reserved_bin_id
-
+            
         pcls = self._bin_if_needed(pcls,bin_weight_id)
+        return self._decouple_binned_cl(pcls, mask_id1, mask_id2, spintype,
+                           bin_weight_id,
+                           beam_id1, beam_id2,
+                           return_theory_filter, pure_E,pure_B)
         
-                
+    def _decouple_binned_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
+                           bin_weight_id = None,
+                           beam_id1 = None, beam_id2 = None,
+                           return_theory_filter=False, pure_E=False,pure_B=False):
+        # pcls must already be binned. It can be a concatenation of polarization spectra.
+
+        if spintype not in ['00','20_B','20_E','22']: raise NotImplementedError
+
         # Get MCM
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,
                               bin_weight_id=bin_weight_id,

@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 from pixell import enmap, enplot, curvedsky as cs, utils, bench,reproject
 import matplotlib.pyplot as plt
@@ -146,7 +148,7 @@ def test_recover_tensor_Bmode():
         ialms[1] = oalm[1] # impure E, impure B
         w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges)
         w.add_mask('m', mask_alm)
-        ret = w.decoupled_cl(ialms,ialms, 'm',return_theory_filter=False,pure_B = False)
+        ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=False,pure_B = False)
         icl_EE = ret['EE']['Cls']
         cl_bb_wig_i = ret['BB']['Cls'].copy()
 

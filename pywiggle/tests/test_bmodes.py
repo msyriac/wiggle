@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 from pywiggle import utils as wutils
 import pywiggle
 import io,sys
-import pymaster as nmt
 import healpy as hp
 from collections import defaultdict
 
 
 def test_recover_tensor_Bmode():
+    import pymaster as nmt
     # Sim config ---
 
     res = 16.0 / 60. # deg

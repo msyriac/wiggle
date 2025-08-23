@@ -2,6 +2,7 @@ import numpy as np
 from . import _wiggle
 import os
 import pkgutil, io
+import healpy as hp
 
 
 """
@@ -9,6 +10,12 @@ import pkgutil, io
 Utilities
 =========
 """
+
+def change_alm_lmax(alms, lmax, mmax_out=None):
+    ilmax  = hp.Alm.getlmax(alms.shape[-1], mmax_out)
+    immax  = mmax_out or ilmax          # fall back to full m-range
+    ommax  = mmax_out or lmax
+    return np.asarray(hp.sphtfunc.resize_alm(alms, ilmax, immax, lmax, ommax))
 
 def multipole_to_bin_indices(lmax, bin_edges):
     """
@@ -313,7 +320,6 @@ def cosine_apodize(bmask,width_deg):
 
 def get_mask(nside,shape,wcs,radius_deg,apo_width_deg,smooth_deg=None,lon_c = 0.0, lat_c = 0.0, hp_file=None):
     # centre on the equator by default
-    import healpy as hp
     import pymaster as nmt
     from pixell import reproject
 

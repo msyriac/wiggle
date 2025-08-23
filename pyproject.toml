@@ -27,7 +27,8 @@ test = [
     'pytest>=4.6',
     'ducc0',
     'pixell',
-    'matplotlib'
+    'matplotlib',
+    'pymaster'
 ]
 
 

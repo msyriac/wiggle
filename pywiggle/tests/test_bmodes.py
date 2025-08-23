@@ -8,12 +8,7 @@ import pywiggle
 import io,sys
 import pymaster as nmt
 import healpy as hp
-from orphics import maps, io as oio
 from collections import defaultdict
-
-
-
-
 
 
 def test_recover_tensor_Bmode():
@@ -45,17 +40,8 @@ def test_recover_tensor_Bmode():
         return cl_decoupled
     
 
-    # Make apodized circular mask
-    # modrmap = enmap.modrmap(shape,wcs)
-    # bmask = enmap.zeros(shape,wcs)
-    # bmask[modrmap<radius_rad] = 1
-    # dist      = enmap.distance_transform(bmask == 1)
-    # mask = np.clip(dist / np.deg2rad(apod_deg), 0, 1)
-    # mask = 0.5 - 0.5*np.cos(np.pi * mask)   # raised-cosine window
-    # maskh = reproject.map2healpix(mask, nside=nside , method="spline", order=1, extensive=False)
-
-    maskh, mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg)#hp_file="/home1/mathm/repos/wiggle/analysis_mask_apo10_C1_nside256.fits")
-    oio.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
+    maskh, mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg)
+    # oio.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
     
     # Mode decoupling
     mask_alm = cs.map2alm(mask, lmax=2 * mlmax)
@@ -88,10 +74,6 @@ def test_recover_tensor_Bmode():
             ells = np.arange(bb_orig.size)
             ee_orig = cs.alm2cl(alm[1])
 
-        # ls = np.arange(ps[0,0].size)
-        # for j in range(3):
-        #     alm[j] = cs.almxfl(alm[j],maps.gauss_beam(beam,ls))
-            
             
         polmap = cs.alm2map(alm[1:], enmap.empty((2,)+shape, wcs,dtype=np.float32), spin=2)  # only Q,U
         
@@ -136,7 +118,7 @@ def test_recover_tensor_Bmode():
 
         ialms = np.zeros((2,oalm[0].size),dtype=np.complex128)
         ialms[0]  = oalm[0]
-        ialms[1] = maps.change_alm_lmax(pureB,mlmax) # impure E, pure B
+        ialms[1] = wutils.change_alm_lmax(pureB,mlmax) # impure E, pure B
         w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges)
         w.add_mask('m', mask_alm)
         ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
@@ -179,8 +161,6 @@ def test_recover_tensor_Bmode():
 
     
     plt.figure()
-    # ell = np.arange(len(bpow))
-    # elln = np.arange(len(bpow_nam))
     plt.plot(ls, input_bb, label='Input BB',ls='--')
     plt.plot(ells, bb_orig, label='Full-sky unmasked BB power',alpha=0.5)
     plt.plot(els, bb_masked, label='Masked BB power divided by mean(mask**2)')
@@ -188,14 +168,6 @@ def test_recover_tensor_Bmode():
         print(key)
         print(means)
         plt.errorbar(leff+i*3,means[key],yerr=errs[key],label=key,ls='none',marker='o')
-    # plt.plot(elsh, bb_maskedh, label='Masked BB power divided by mean(mask**2), lmax/2')
-    # plt.plot(elln, bpow_nam, label='Recovered pure B (Nmt)')
-    # plt.plot(elln, bpow_nam_pixell, label='Recovered pure B (Nmt; CAR)')
-    # plt.plot(ell, bpow, label='Recovered pure B')
-    # plt.plot(bcents,cl_BB, label = 'Decoupled pure B', marker='d', ls='none')
-    # plt.plot(bcents,ncl_BB, label = 'Decoupled wiggle, pure B Nmt', marker='d', ls='none')
-    # plt.plot(bcents,icl_BB, label = 'Decoupled impure B', marker='o', ls='none')
-    # plt.plot(leff,cl_p_bb, label = 'Decoupled pure B (Nmt)', marker='x', ls='none')
     
     # plt.plot(oell, obpow, label='Recovered pure B (masked on input)')
     plt.xlim(2, 300)
@@ -207,15 +179,20 @@ def test_recover_tensor_Bmode():
     plt.grid(True)
     plt.tight_layout()
     plt.savefig('bmodes.png',dpi=200)
+    plt.close()
 
-    pl = oio.Plotter('rCl',ylabel='$\\sigma(C_{\\ell}^{\\rm pure})/\\sigma(C_{\\ell}^{\\rm impure})$',xyscale='linlog')
+    plt.figure()
     for i,key in enumerate(results.keys()):
         if key!="Wiggle BB impure decoupled (CAR)":
-            pl.add(leff+i*3,errs[key]/errs["Wiggle BB impure decoupled (CAR)"],label=key,marker='o')
-    pl.hline(y=1)
-    pl._ax.set_ylim(0.05,20.0)
-    pl._ax.set_xlim(2, 300)
-    pl.done('berrrat.png')
+            plt.plot(leff+i*3,errs[key]/errs["Wiggle BB impure decoupled (CAR)"],label=key,marker='o')
+    plt.ylabel('$\\sigma(C_{\\ell}^{\\rm pure})/\\sigma(C_{\\ell}^{\\rm impure})$')
+    plt.xlabel(r'$\ell$')
+    plt.yscale('log')
+    plt.axhline(y=1)
+    plt.ylim(0.05,20.0)
+    plt.xlim(2, 300)
+    plt.savefig('berrrat.png',dpi=200)
+    plt.close()
 
     # plt.figure()
     # ell = np.arange(len(epow))

@@ -104,11 +104,11 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 		# Register a beam to deconvolve from both fields
 		> w.add_beam('b1', beam_fl)
 		# Get the decoupled cross-Cls from the masked field SHTs
-		> ret_TT = w.decoupled_cl(alm_t1, alm_t2, 'mt1', 'mt2',
+		> ret_TT = w.get_powers(alm_t1, alm_t2, 'mt1', 'mt2',
 		                          return_theory_filter=False,
-		     			  beam_id1='b1', beam_id2='b1')
+		     			  beam_id1='b1', beam_id2='b1')['TT']
 
-This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``decoupled_cl`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
+This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``get_powers`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
 
 
 Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a matrix that can be dotted with a theory spectrum to obtain the binned theory to compare the power spectrum to (e.g. for inference):

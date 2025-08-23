@@ -26,7 +26,8 @@ test = [
     'coveralls>=1.5',
     'pytest>=4.6',
     'ducc0',
-    'pixell'    
+    'pixell',
+    'matplotlib'
 ]
 
 

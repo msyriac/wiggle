@@ -106,11 +106,12 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 		# Register a beam to deconvolve from both fields
 		> w.add_beam('b1', beam_fl)
 		# Get the decoupled cross-Cls from the masked field SHTs
-		> ret_TT = w.get_powers(alm_t1, alm_t2, 'mt1', 'mt2',
+		> ret = w.get_powers(alm_t1, alm_t2, 'mt1', 'mt2',
 		                          return_theory_filter=False,
-		     			  beam_id1='b1', beam_id2='b1')['TT']
+		     			  beam_id1='b1', beam_id2='b1')
+		> ret_TT = ret['TT']
 
-This object can then be reused if the same masks are being re-used, which avoids re-calculation of mode-coupling matrices. The interface to ``get_powers`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields.
+The interface to ``get_powers`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields. If the input spherical harmonics are `(1,nalm)` or `(nalm,)` dimensional, where `nalm` is the number of spherical harmonic `a_lm` elements, the field is assumed to be spin-0 and only the `TT`-like spectrum is returned in the dictionary. If the input spherical harmonics are `(2,nalm)` dimensional, then the inputs are assumed to be E/B decompositions of a spin-2 field, and EE, EB, BE and BB are returned. If the input spherical harmonics are `(3,nalm)` dimensional, then the inputs are assumed to be a scalar field along with E/B decompositions of a spin-2 field, and TT, TE, ET, EE, EB, BE and BB are returned.
 
 
 Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a matrix that can be dotted with a theory spectrum to obtain the binned theory to compare the power spectrum to (e.g. for inference):

@@ -317,6 +317,73 @@ def cosine_apodize(bmask,width_deg):
     r = width_deg * np.pi / 180.
     return 0.5*(1-np.cos(bmask.distance_transform(rmax=r)*(np.pi/r)))
 
+# CONSOLE I/O
+def cprint(string,color=None,bold=False,uline=False):
+    if not(isinstance(string,str)):
+        string = str(string)
+    x=""
+    if bold:
+        x+=bcolors.BOLD
+    if uline:
+        x+=bcolors.UNDERLINE
+
+    if color is not None: color = color.lower()    
+    if color in ['b','blue']:
+        x+=bcolors.OKBLUE
+    elif color in ['r','red','f','fail']:
+        x+=bcolors.FAIL
+    elif color in ['g','green','ok']:
+        x+=bcolors.OKGREEN
+    elif color in ['y','yellow','w','warning']:
+        x+=bcolors.WARNING
+    elif color in ['p','purple','h','header']:
+        x+=bcolors.HEADER
+    
+    print(x+string+bcolors.ENDC)
+    
+class bcolors:
+    '''
+    Colored output for print commands
+    '''
+    
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def hplot(img,savename=None,verbose=True,grid=False,**kwargs):
+    from pixell import enplot
+    plots = enplot.get_plots(img,grid=grid,**kwargs)
+    if savename is None:
+        enplot.show(plots)
+        return
+    enplot.write(savename,plots)
+    if verbose: cprint("Saved plot to "+ savename,color="g")
+
+def mollview(hp_map,filename=None,lim=None,coord='C',verbose=True,return_projected_map=False,xsize=1200,grat_deg=None,dpi=None,grat_color='gray',grat_alpha=0.5,**kwargs):
+    '''
+    mollview plot for healpix wrapper
+    '''
+    import healpy as hp
+    if lim is None:
+        cmin = cmax = None
+    elif type(lim) is list or type(lim) is tuple:
+        cmin,cmax = lim
+    else:
+        cmin =-lim
+        cmax = lim
+    retimg = hp.mollview(hp_map,min=cmin,max=cmax,coord=coord,return_projected_map=return_projected_map,xsize=xsize,**kwargs)
+    if grat_deg is not None:
+        hp.graticule(dpar=grat_deg,dmer=grat_deg,coord=coord,color=grat_color,alpha=grat_alpha)
+    if filename is not None:
+        plt.savefig(filename,dpi=dpi)
+        if verbose: cprint("Saved healpix plot to "+ filename,color="g")
+    if return_projected_map: return retimg
+
 
 def get_mask(nside,shape,wcs,radius_deg,apo_width_deg,smooth_deg=None,lon_c = 0.0, lat_c = 0.0, hp_file=None):
     # centre on the equator by default

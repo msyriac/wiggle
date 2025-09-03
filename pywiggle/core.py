@@ -94,7 +94,6 @@ class Wiggle(object):
             self._binned = True
             
 
-            
         
         # This is needed for spin-0; no extra cost in getting a view of it,
         self.ud00 = self.cd00[:,:lmax+1]
@@ -239,7 +238,7 @@ class Wiggle(object):
             If an unsupported `spintype` is provided.
         """
         
-        if spintype not in ['00','20_E','20_B','22','+','-']: raise ValueError(f'spintype {spintype} not recognized')
+        if spintype not in ['TT','TE','TB','22','+','-']: raise ValueError(f'spintype {spintype} not recognized')
         f = lambda spin1,spin2,parity,gfact: self._get_m(mask_id1,mask_id2,spin1=spin1,spin2=spin2,parity=parity,
                                                     bin_weight_id=bin_weight_id,
                                                     beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
@@ -259,9 +258,9 @@ class Wiggle(object):
                 g2 = f(0,0,'-',2)                
             return (g1+g2)/2.
 
-        if spintype=='00':
+        if spintype=='TT':
             return f(0,0,'+',None)
-        elif spintype[:2]=='20':
+        elif spintype in ['TE','TB']:
             if (('E' in spintype) and pure_E) or (('B' in spintype) and pure_B):
                 return f(0,0,'+',1)
             else:
@@ -301,6 +300,8 @@ class Wiggle(object):
                 [ zero,  -Mm_EB,     Mp_EB,     zero],
                 [ Mm_EB,     zero,   zero,   Mp_BB  ]
             ])
+        else:
+            raise ValueError
         
 
     def _get_mask_cls(self,mask_id1,mask_id2):
@@ -329,7 +330,7 @@ class Wiggle(object):
         return M
         
         
-    def get_theory_filter(self,mask_id1,mask_id2=None,spintype='00',bin_weight_id=None,pure_E=False,pure_B=False):
+    def get_theory_filter(self,mask_id1,mask_id2=None,spintype='TT',bin_weight_id=None,pure_E=False,pure_B=False):
         r"""
         Construct the theoretical bandpower filter :math:`\mathcal{F}^{s_as_b}_{q\ell}`,
         as defined in arxiv:1809.09603.
@@ -365,9 +366,9 @@ class Wiggle(object):
             Identifier for the second mask (e.g., in cross-spectra), previously provided through `self.add_mask`. If `None`, 
             defaults to `mask_id1`.
 
-        spintype : str, default='00'
+        spintype : str, default='TT'
             Specifies the spin combination of the fields:
-            - `'00'` for scalar × scalar (e.g., temperature or κ)
+            - `'TT'` for scalar × scalar (e.g., temperature or κ)
             - `'++'`, `'--'` for E/B-mode combinations (spin-2 × spin-2)
             - `'20'` for spin-2 × spin-0 cross spectra (e.g., shear × κ)
 
@@ -679,24 +680,24 @@ class Wiggle(object):
         if 'T' in spin:
             # Get TT
             cls_tt = balm2cl(alms1[0], alms2[0])
-            ret_cls['TT'] = decfunc(cls_tt,'00',mask_ids1[0],mask_ids2[0])
+            ret_cls['TT'] = decfunc(cls_tt,'TT',mask_ids1[0],mask_ids2[0])
         if '+' in spin:
             # Get TE
             cls_te = balm2cl(alms1[0], alms2[1])
-            ret_cls['TE'] = decfunc(cls_te,'20_E',mask_ids1[0],mask_ids2[1])
+            ret_cls['TE'] = decfunc(cls_te,'TE',mask_ids1[0],mask_ids2[1])
             cls_et = balm2cl(alms1[1], alms2[0])
-            ret_cls['ET'] = decfunc(cls_et,'20_E',mask_ids1[1],mask_ids2[0])
+            ret_cls['ET'] = decfunc(cls_et,'TE',mask_ids1[1],mask_ids2[0])
             # Get TB
             cls_tb = balm2cl(alms1[0], alms2[2])
-            ret_cls['TB'] = decfunc(cls_tb,'20_B',mask_ids1[0],mask_ids2[1])
+            ret_cls['TB'] = decfunc(cls_tb,'TB',mask_ids1[0],mask_ids2[1])
             cls_bt = balm2cl(alms1[2], alms2[0])
-            ret_cls['BT'] = decfunc(cls_bt,'20_B',mask_ids1[1],mask_ids2[0])
+            ret_cls['BT'] = decfunc(cls_bt,'TB',mask_ids1[1],mask_ids2[0])
         if 'P' in spin:
             # Get EE
             cls_ee = balm2cl(alms1[1+idoff], alms2[1+idoff])
             # Get EB
             cls_eb = balm2cl(alms1[1+idoff], alms2[2+idoff])
-            # Get EB
+            # Get BE
             cls_be = balm2cl(alms1[2+idoff], alms2[1+idoff])
             # Get BB
             cls_bb = balm2cl(alms1[2+idoff], alms2[2+idoff])
@@ -722,7 +723,7 @@ class Wiggle(object):
             
             
 
-    def decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
+    def decoupled_cl(self,pcls, mask_id1, mask_id2=None, spintype='TT',
                            bin_weight_id = None,
                            beam_id1 = None, beam_id2 = None,
                            return_theory_filter=False, pure_E=False,pure_B=False):
@@ -739,13 +740,13 @@ class Wiggle(object):
                            beam_id1, beam_id2,
                            return_theory_filter, pure_E,pure_B)
         
-    def _decouple_binned_cl(self,pcls, mask_id1, mask_id2=None, spintype='00',
+    def _decouple_binned_cl(self,pcls, mask_id1, mask_id2=None, spintype='TT',
                            bin_weight_id = None,
                            beam_id1 = None, beam_id2 = None,
                            return_theory_filter=False, pure_E=False,pure_B=False):
         # pcls must already be binned. It can be a concatenation of polarization spectra.
 
-        if spintype not in ['00','20_B','20_E','22']: raise NotImplementedError
+        if spintype not in ['TT','TB','TE','22']: raise NotImplementedError
 
         # Get MCM
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,
@@ -763,7 +764,7 @@ class Wiggle(object):
         return ret
     
 
-def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = None,bin_weights = None,
+def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='TT',bin_edges = None,bin_weights = None,
                                       beam_fl1 = None,beam_fl2 = None, pure_E=False,pure_B=False,
                                       return_obj=False):
     r"""
@@ -783,11 +784,12 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
     lmax : int
         Maximum multipole for the output coupling matrix.
 
-    spintype : str, default='00'
+    spintype : str, default='TT'
         Spin combination of the fields:
-        - `'00'`: scalar × scalar (e.g., T × T or κ × κ)
+        - `'TT'`: scalar × scalar (e.g., T × T or κ × κ)
         - `'++'`, `'--'`: spin-2 × spin-2 (e.g., E × E or B × B)
-        - `'20'`: spin-2 × spin-0 (e.g., E × κ or γ × κ)
+        - `'TE'`: spin-2 E × spin-0 (e.g., E × κ or γ_E × κ)
+        - `'TB'`: spin-2 E × spin-0 (e.g., B × κ or γ_B × κ)
 
     bin_edges : array_like, optional
         Array of bin edges defining bandpowers. If not provided, no binning is applied.
@@ -817,7 +819,11 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
     """
     g = Wiggle(lmax,bin_edges = bin_edges)
     g.add_mask('m1',mask_cls=mask_cls)
-    g.add_bin_weights('b1',bin_weights = bin_weights)
+    if bin_weights:
+        bwid = 'bw'
+        g.add_bin_weights(bwid,bin_weights = bin_weights)
+    else:
+        bwid = 'bw'
     if beam_fl1 is not None:
         g.add_beam('p1',beam_fl1)
         beam_id1 = 'p1'
@@ -828,7 +834,7 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='00',bin_edges = No
         beam_id2 = 'p2'
     else:
         beam_id2 = None
-    m = g.get_coupling_matrix_from_ids('m1','m1',spintype=spintype,bin_weight_id='b1',
+    m = g.get_coupling_matrix_from_ids('m1','m1',spintype=spintype,bin_weight_id=bw,
                                        beam_id1=beam_id1,beam_id2=beam_id2, pure_E=pure_E,pure_B=pure_B)
     if return_obj:
         return m,g
@@ -979,3 +985,47 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
     return pureE_alms, pureB_alms
 
 
+def get_powers(alms1,alms2, mask_alm1, mask_alm2=None,
+               bin_weights = None,
+               beam_fl1 = None, beam_fl2 = None,
+               pure_E = False, pure_B = False,
+               return_theory_filter=False,
+               lmax=None,bin_edges=None,
+               verbose=False):
+
+    if not(alms1.shape==alms2.shape): raise ValueError
+    if lmax is None:
+        if alms1.ndim==2:
+            nalm = alms1.shape[1]
+        elif alms1.ndim<=1:
+            nalm = alms1.size
+        else:
+            raise ValueError
+        lmax = hp.Alm.getlmax(nalm)
+    w = Wiggle(lmax, bin_edges=bin_edges, verbose=verbose)
+    w.add_mask('m1', mask_alm1)
+    if mask_alm2:
+        m2id = 'm2'
+        w.add_mask(m2id, mask_alm2)
+    else:
+        m2id = 'm1'
+    if bin_weights:
+        bwid = 'bw'
+        w.add_bin_weights(bwid,bin_weights)
+    else:
+        bwid = None
+    if beam_fl1 is not None:
+        w.add_beam('p1',beam_fl1)
+        bid1 = 'p1'
+    else:
+        bid1 = None
+    if beam_fl2 is not None:
+        w.add_beam('p2',beam_fl2)
+        bid2 = 'p2'
+    else:
+        bid2 = None
+    print(alms1.shape,alms2.shape,mask_alm1.shape,lmax)
+    return w.get_powers(alms1,alms2, 'm1', mask_ids2=m2id,
+                     bin_weight_id = bwid,
+                     beam_id1 = bid1, beam_id2 = bid2, pure_E = pure_E, pure_B = pure_B,
+                     return_theory_filter=return_theory_filter)

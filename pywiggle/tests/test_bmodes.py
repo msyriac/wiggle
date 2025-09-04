@@ -20,8 +20,8 @@ def test_recover_tensor_Bmode():
     shape, wcs = enmap.fullsky_geometry(res=np.deg2rad(res))
     lmax = 3*nside
     mlmax = 2*nside
-    hpixdiv = 2
-    cardiv = 2
+    hpixdiv = 1
+    cardiv = 1
     nsims = 10
 
     area_deg2 = 4000.

@@ -290,7 +290,7 @@ def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.1):
     pars.HighAccuracyDefault = False
 
     results = camb.get_results(pars)
-    cls = results.get_total_cls(lmax=lmax,CMB_unit='muK')
+    cls = results.get_total_cls(lmax=lmax,CMB_unit='muK',raw_cl=True)
 
     # cls has shape (lmax+1, 4): TT, EE, BB, TE
     ps = np.zeros((3, 3, lmax+1))

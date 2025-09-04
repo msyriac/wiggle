@@ -9,6 +9,8 @@ import io,sys
 import healpy as hp
 from collections import defaultdict
 
+from orphics import io, stats # !!!
+
 def print_keys_tree(d, indent=0):
     for key, value in d.items():
         print("  " * indent + str(key))
@@ -79,6 +81,7 @@ def unpack_theory(ret,cltt,clte,clee,clbb,cleb=None):
     return ret_th
 
 
+s = stats.Statistics()
 
 for i in range(nsims):
     alm = cs.rand_alm(ps, lmax=lmax)
@@ -99,7 +102,9 @@ for i in range(nsims):
 
 
     ret = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
-    unpack_cls(ret)
+    ret = unpack_cls(ret)
+    for spec in ['TT','EE','TE','BB']
+    
     if i==0:
         bth = unpack_theory(ret,ps[0,0],ps[0,1],ps[1,1],ps[2,2])
     

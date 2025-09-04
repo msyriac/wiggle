@@ -276,7 +276,13 @@ class Wiggle(object):
                 return (g1-g2)/2.
         elif spintype=='22':
 
-            zero = self._zeros()
+            Mp_EE = Mp(int(pure_E)*2)
+            Mp_BB = Mp(int(pure_B)*2)
+            Mp_EB = Mp(sum([pure_E,pure_B]))
+
+            
+            #zero = self._zeros()
+            zero = Mp_EE*0.
             
             if pure_E and pure_B:
                 Mm_EB = zero # TODO: confirm this identity
@@ -290,9 +296,6 @@ class Wiggle(object):
                 Mm_EB = (g1-g2)/2.
 
                 
-            Mp_EE = Mp(int(pure_E)*2)
-            Mp_BB = Mp(int(pure_B)*2)
-            Mp_EB = Mp(sum([pure_E,pure_B]))
             
             return np.block([
                 [ Mp_EE,     zero,   zero,   Mm_EB  ],
@@ -393,6 +396,7 @@ class Wiggle(object):
             
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,bin_weight_id=bin_weight_id,
                               beam_id1=None,beam_id2=None)
+
         thfilt = np.einsum('ij,jk->ik', cinv, Mc, optimize='greedy')
         return thfilt
 

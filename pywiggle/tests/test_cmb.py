@@ -9,11 +9,6 @@ import io,sys
 import healpy as hp
 from collections import defaultdict
 
-def print_keys_tree(d, indent=0):
-    for key, value in d.items():
-        print("  " * indent + str(key))
-        if isinstance(value, dict):
-            print_keys_tree(value, indent + 1)
 
 nside = 128
 lmax = 2*nside
@@ -62,8 +57,7 @@ def unpack_theory(ret,cltt,clte,clee,clbb,cleb=None):
     ret_th['TE'] = te_th @ clte[:lmax]
     
     pol_th = ret['ThPol']
-    print(tt_th.shape,pol_th.shape)
-    nbins = pol_th.shape[0]
+    nbins = tt_th.shape[0]
     if cleb is None: cleb = clbb*0.
     clpol = np.concatenate( [clee[:lmax], cleb[:lmax], cleb[:lmax], clbb[:lmax] ] )
     bpol = pol_th @ clpol
@@ -74,11 +68,12 @@ def unpack_theory(ret,cltt,clte,clee,clbb,cleb=None):
     for i,spec in enumerate(rlist):
         end = start + step
         ret_th[spec] = bpol[start:end]
-        if ret_th[spec].size!=step: raise ValueError
+        if ret_th[spec].shape[0]!=step: raise ValueError
         start = end
     return ret_th
 
 
+s = stats.Stats()
 
 for i in range(nsims):
     alm = cs.rand_alm(ps, lmax=lmax)
@@ -90,18 +85,23 @@ for i in range(nsims):
     imap = imap * mask
     oalms = cs.map2alm(imap,lmax=lmax,spin=[0,2])
 
-    #for i in range(3): wutils.hplot(imap[i],f'imap_{i}',grid=True,ticks=20)
-    #wutils.hplot(mask,f'mask',grid=True,ticks=20)
+    if i==0:
+        for j in range(3): wutils.hplot(imap[j],f'imap_{j}',grid=True,ticks=20)
+        wutils.hplot(mask,f'mask',grid=True,ticks=20)
 
-
+    # Purify B
     _, pureB = pywiggle.get_pure_EB_alms(imap[1], imap[2], mask,lmax=lmax,masked_on_input=True)
 
 
-
+    # Get impure power
     ret = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
-    unpack_cls(ret)
+    bcls = unpack_cls(ret)
     if i==0:
         bth = unpack_theory(ret,ps[0,0],ps[0,1],ps[1,1],ps[2,2])
-    
+
+    # Get pure power
     oalms[2] = pureB.copy()
     ret_pure = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
+    bcls_pure = unpack_cls(ret_pure)
+    if i==0:
+        bth_pure = unpack_theory(ret_pure,ps[0,0],ps[0,1],ps[1,1],ps[2,2])

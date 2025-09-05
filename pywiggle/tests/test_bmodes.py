@@ -12,7 +12,7 @@ from collections import defaultdict
 
 def test_recover_tensor_Bmode():
     import pymaster as nmt
-    # Sim config ---
+    # Sim config
 
     res = 16.0 / 60. # deg
     beam = res * 60. * 2 #arcmin
@@ -22,7 +22,7 @@ def test_recover_tensor_Bmode():
     mlmax = 2*nside
     hpixdiv = 1
     cardiv = 1
-    nsims = 10
+    nsims = 3
 
     area_deg2 = 4000.
     apod_deg = 10.0
@@ -31,9 +31,14 @@ def test_recover_tensor_Bmode():
     radius_rad = np.deg2rad(radius_deg)
 
     # Load CMB Cls ---
-    ps, ells = wutils.load_test_spectra()
+    with bench.show("camb"):
+        ps = wutils.get_camb_spectra(lmax=lmax)
+    ells = np.arange(ps[0,0].size)
+    # ps, ells = wutils.load_test_spectra()
     assert ps.shape == (3, 3, len(ells))
 
+    theory = wutils.get_cldict(ps)
+    
     def compute_master(f_a, f_b, wsp):
         cl_coupled = nmt.compute_coupled_cell(f_a, f_b)
         cl_decoupled = wsp.decouple_cell(cl_coupled)
@@ -41,7 +46,7 @@ def test_recover_tensor_Bmode():
     
 
     maskh, mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg)
-    # oio.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
+    # wutils.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
     
     # Mode decoupling
     mask_alm = cs.map2alm(mask, lmax=2 * mlmax)
@@ -56,8 +61,7 @@ def test_recover_tensor_Bmode():
         bin_edges.append(b.get_ell_min(i))
     bin_edges.append(b.get_ell_max(nbins-1))
 
-    # bin_edges = np.append([2,10,20], np.arange(40,lmax,10))
-    bcents = leff #(bin_edges[1:]+bin_edges[:-1])/2.
+    bcents = leff
     w2 = wutils.wfactor(2,mask)
     
     
@@ -96,18 +100,8 @@ def test_recover_tensor_Bmode():
             els = np.arange(bb_masked.size)
 
 
-        # f2yp = nmt.NmtField(mask, [Q,U], purify_e=False, purify_b=True,n_iter=0,wcs=Q.wcs,lmax=mlmax,lmax_mask=mlmax)
-        # nam_map = f2yp.get_maps().reshape((2,Q.shape[0],Q.shape[1]))
-        # print(Q.shape,nam_map.shape)
-        # palm = cs.map2alm(enmap.enmap(nam_map,Q.wcs),spin=2,lmax=mlmax)
-        # nam_bb_pixell = cs.alm2cl(palm[1],palm[1])
-        
         
         f2yp = nmt.NmtField(maskh, [Qh, Uh], purify_e=False, purify_b=True,n_iter=0,lmax=int(mlmax/hpixdiv),lmax_mask=int(mlmax/hpixdiv))
-        # nam_map = f2yp.get_maps()
-        # halm = hp.map2alm([Qh*0,nam_map[0],nam_map[1]],pol=True,iter=0,lmax=mlmax)
-        # nam_bb = cs.alm2cl(halm[2],halm[2])
-
         # Healpix Namaster Purified
         w_yp = nmt.NmtWorkspace.from_fields(f2yp, f2yp, b)
         cl_yp_nmt = compute_master(f2yp, f2yp, w_yp)
@@ -119,24 +113,37 @@ def test_recover_tensor_Bmode():
         ialms = np.zeros((2,oalm[0].size),dtype=np.complex128)
         ialms[0]  = oalm[0]
         ialms[1] = wutils.change_alm_lmax(pureB,mlmax) # impure E, pure B
-        w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges)
+        w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges,verbose=False)
         w.add_mask('m', mask_alm)
-        ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=False,pure_B = True)
+        ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=True if i==0 else False,pure_B = True)
+        if i==0:
+            bth_pure = pywiggle.get_binned_theory(ret,theory)
 
         cl_EE = ret['EE']['Cls']
         cl_bb_wig_p = ret['BB']['Cls'].copy()
 
         ialms[0]  = oalm[0]
         ialms[1] = oalm[1] # impure E, impure B
-        w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges)
+        w = pywiggle.Wiggle(mlmax, bin_edges=bin_edges,verbose=False)
         w.add_mask('m', mask_alm)
-        ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=False,pure_B = False)
+        ret = w.get_powers(ialms,ialms, 'm',return_theory_filter=True if i==0 else False,pure_B = False)
+        if i==0:
+            bth = pywiggle.get_binned_theory(ret,theory)
         icl_EE = ret['EE']['Cls']
         cl_bb_wig_i = ret['BB']['Cls'].copy()
 
         results["Namaster BB pure decoupled (healpix)"].append(cl_yp_nmt[3].copy())
         results["Wiggle BB pure decoupled (CAR)"].append(cl_bb_wig_p.copy())
         results["Wiggle BB impure decoupled (CAR)"].append(cl_bb_wig_i.copy())
+
+        from orphics import io
+        pl = io.Plotter('Cell')
+        print(bth_pure['BB'])
+        pl.add(leff,bth['BB']*leff*(leff+1.)/2./np.pi,label='binned BB theory',marker='x',color='r',ls='none')
+        pl.add(leff+5,bth_pure['BB']*leff*(leff+1.)/2./np.pi,label='binned BB theory pure',marker='x',color='b',ls='none')
+        pl.done('bb.png')
+        sys.exit()
+
         
         
 
@@ -150,30 +157,25 @@ def test_recover_tensor_Bmode():
         errs[label] = np.sqrt(np.var(stacked, axis=0, ddof=1)/nsims)
         
     # Compute power spectrum and compare ---
-    # bpow_nam = nam_bb / w2
-    # bpow_nam_pixell = nam_bb_pixell / w2
-    # bpow = cs.alm2cl(pureB) / w2
-    # epow = cs.alm2cl(pureE) / w2
     input_bb = ps[2, 2]
-    # input_ee = ps[1, 1]
     ls = np.arange(input_bb.size)
-    # ell = np.arange(bpow.size)
 
     
     plt.figure()
-    plt.plot(ls, input_bb, label='Input BB',ls='--')
-    plt.plot(ells, bb_orig, label='Full-sky unmasked BB power',alpha=0.5)
-    plt.plot(els, bb_masked, label='Masked BB power divided by mean(mask**2)')
+    plt.plot(ls, input_bb*ls*(ls+1)/2./np.pi, label='Input BB',ls='--')
+    plt.plot(ells, bb_orig*ells*(ells+1)/2./np.pi, label='Full-sky unmasked BB power',alpha=0.5)
+    plt.plot(els, bb_masked*els*(els+1)/2./np.pi, label='Masked BB power divided by mean(mask**2)')
     for i,key in enumerate(results.keys()):
         print(key)
         print(means)
-        plt.errorbar(leff+i*3,means[key],yerr=errs[key],label=key,ls='none',marker='o')
+        plt.errorbar(leff+i*3,means[key]*leff*(leff+1.)/2./np.pi,yerr=errs[key]*leff*(leff+1.)/2./np.pi,label=key,ls='none',marker='o')
+    plt.plot(leff,bth['BB']*leff*(leff+1.)/2./np.pi,label='binned BB theory',marker='x',color='r',ls='none')
+    plt.plot(leff+5,bth_pure['BB']*leff*(leff+1.)/2./np.pi,label='binned BB theory pure',marker='x',color='b',ls='none')
     
-    # plt.plot(oell, obpow, label='Recovered pure B (masked on input)')
     plt.xlim(2, 300)
     plt.yscale('log')
     plt.xlabel(r'$\ell$')
-    plt.ylabel(r'$C_\ell^{BB}$')
+    plt.ylabel(r'$D_\ell^{BB}$')
     plt.legend()
     plt.title(f'B-mode recovery test ({area_deg2:.0f} deg$^2$ mask)')
     plt.grid(True)
@@ -187,48 +189,11 @@ def test_recover_tensor_Bmode():
             plt.plot(leff+i*3,errs[key]/errs["Wiggle BB impure decoupled (CAR)"],label=key,marker='o')
     plt.ylabel('$\\sigma(C_{\\ell}^{\\rm pure})/\\sigma(C_{\\ell}^{\\rm impure})$')
     plt.xlabel(r'$\ell$')
+    plt.legend()
     plt.yscale('log')
     plt.axhline(y=1)
-    plt.ylim(0.05,20.0)
+    # plt.ylim(0.05,20.0)
     plt.xlim(2, 300)
     plt.savefig('berrrat.png',dpi=200)
     plt.close()
 
-    # plt.figure()
-    # ell = np.arange(len(epow))
-    # plt.plot(ls, input_ee, label='Input EE',ls='--')
-    # plt.plot(ells, ee_orig, label='Full-sky unmasked EE power',alpha=0.5)
-    # plt.plot(els, ee_masked, label='Masked EE power / mean(mask**2)')
-    # plt.plot(ell, epow, label='Recovered pure E')
-    # # plt.plot(oell, oepow, label='Recovered pure E (masked on input)')
-    # # plt.plot(bcents,icl_EE, label = 'Decoupled impure E', marker='o', ls='none')
-    # # plt.plot(bcents+1,cl_EE, label = 'Decoupled impure E, purified B', marker='o', ls='none')
-    # # plt.plot(leff,cl_np_ee, label = 'Decoupled impure E (Nmt)', marker='x', ls='none')
-    # plt.xlim(2, 300)
-    # plt.yscale('log')
-    # plt.xlabel(r'$\ell$')
-    # plt.ylabel(r'$C_\ell^{EE}$')
-    # plt.legend()
-    # plt.title(f'E-mode recovery test ({area_deg2:.0f} deg$^2$ mask)')
-    # plt.grid(True)
-    # plt.tight_layout()
-    # plt.savefig('emodes.png',dpi=200)
-
-
-    # # Compute power spectrum and compare ---
-    # plt.figure()
-    # plt.plot(ls, input_ee, label='Input EE',ls='--')
-    # plt.plot(ells, ee_orig, label='Full-sky unmasked EE power',alpha=0.5)
-    # plt.plot(ell, bpow, label='Recovered pure B')
-    # plt.plot(bcents,cl_BB, label = 'Decoupled pure B', marker='d', ls='none')
-    # print(cl_BB)
-    # plt.xlim(2, 300)
-    # plt.yscale('log')
-    # plt.xlabel(r'$\ell$')
-    # plt.ylabel(r'$C_\ell^{BB}$')
-    # plt.legend()
-    # plt.title(f'B-mode recovery test ({area_deg2:.0f} deg$^2$ mask)')
-    # plt.grid(True)
-    # plt.tight_layout()
-    # plt.savefig('bmodes_alone.png',dpi=200)
-    

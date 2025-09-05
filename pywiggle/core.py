@@ -279,9 +279,7 @@ class Wiggle(object):
             Mp_EE = Mp(int(pure_E)*2)
             Mp_BB = Mp(int(pure_B)*2)
             Mp_EB = Mp(sum([pure_E,pure_B]))
-
             
-            #zero = self._zeros()
             zero = Mp_EE*0.
             
             if pure_E and pure_B:
@@ -327,7 +325,9 @@ class Wiggle(object):
         b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact) # (N x nbins)
         xi = self._get_corr(mask_id1,mask_id2,parity=parity)
         W = self.w_mu * xi # (N,)
-        b2w = self._get_G_term_weights(mode_count_weight=True,parity=parity,apply_bin_weights=False,bin_weight_id=None) # (nells,)
+        
+        b2w = self._get_G_term_weights(mode_count_weight=True,parity=parity,
+                                       apply_bin_weights=False,bin_weight_id=None,pfact=gfact if (gfact is not None) else None) # (nells,)
         R2 = ud * b2w[None,:] # (N, nells)
         M = np.einsum('i,ij,ik->jk', W, b1, R2, optimize='greedy') # (nbins,nells)
         return M
@@ -395,7 +395,7 @@ class Wiggle(object):
         Mc = self._Mmatrix(spintype,f,pure_E,pure_B)
             
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,bin_weight_id=bin_weight_id,
-                              beam_id1=None,beam_id2=None)
+                              beam_id1=None,beam_id2=None, pure_E=pure_E,pure_B=pure_B)
 
         thfilt = np.einsum('ij,jk->ik', cinv, Mc, optimize='greedy')
         return thfilt
@@ -768,6 +768,87 @@ class Wiggle(object):
         return ret
     
 
+def get_binned_theory(theory_filter_dict, cl_dict):
+    """
+    Compute binned theoretical power spectra using provided filter matrices and input C_ells.
+
+    This function takes in a dictionary of theory filter matrices
+    (typically returned by Wiggle functions) and a dictionary of 
+    angular power spectra (`cl_dict`), and returns a dictionary of binned theoretical 
+    spectra after matrix multiplication with the appropriate filters.
+
+    Supports scalar spectra (`TT`, `TE`, `TB`) and polarization spectra 
+    (`EE`, `EB`, `BE`, `BB`) via a block matrix labeled `ThPol`.
+
+    Parameters
+    ----------
+    theory_filter_dict : dict
+        Dictionary containing filter matrices:
+            - Keys may include 'TT', 'TE', 'TB', each mapping to a dict with key 'Th' (2D array)
+              each of shape (nbins, lmax).
+            - May also include 'ThPol', a 2D array of shape (4 * nbins, lmax) for polarization.
+    cl_dict : dict
+        Dictionary mapping spectrum keys ('TT', 'TE', 'TB', 'EE', 'BB', 'EB') to 1D numpy arrays 
+        of C_ell values, starting at ell=0.
+
+    Returns
+    -------
+    ret_th : dict
+        Dictionary containing the binned theory spectra with keys corresponding to input types:
+        - 'TT', 'TE', 'TB' (if present in inputs)
+        - 'EE', 'EB', 'BE', 'BB' (if 'ThPol' is provided)
+
+
+    Notes
+    -----
+    - Missing `TB`, `BB`, or `EB` spectra in `cl_dict` are assumed to be zero with a warning.
+    - The maximum multipole `lmax` is inferred from the second dimension of each 'Th' matrix.
+
+    """
+    ret = theory_filter_dict
+    
+    ret_th = {}
+    
+    for key in ['TT','TE','TB']:
+        if key in ret.keys():
+            th = ret[key]['Th']
+            lmax = th.shape[1]
+            if key=='TB' and (key not in cl_dict.keys()):
+                warnings.warn("No TB provided; assuming zero")
+                cl  = np.zeros(lmax+1)
+            else:
+                cl = cl_dict[key][:lmax]
+            ret_th[key] = th @ cl
+                
+    if 'ThPol' in ret.keys():
+        pol_th = ret['ThPol']
+        nbins = pol_th.shape[0] // 4
+        lmax = pol_th.shape[1] // 4
+        clee = cl_dict['EE']
+        try:
+            clbb = cl_dict['BB']
+        except KeyError:
+            clbb = clee*0.
+            warnings.warn("No BB provided; assuming zero")
+        try:
+            cleb = cl_dict['EE']
+        except KeyError:
+            cleb = clee*0.
+            warnings.warn("No EB provided; assuming zero")
+        clpol = np.concatenate( [clee[:lmax], cleb[:lmax], cleb[:lmax], clbb[:lmax] ] )
+        bpol = pol_th @ clpol
+
+        rlist = ['EE','EB','BE','BB']
+        start = 0
+        step = nbins
+        for i,spec in enumerate(rlist):
+            end = start + step
+            ret_th[spec] = bpol[start:end]
+            if ret_th[spec].shape[0]!=step: raise ValueError
+            start = end
+                
+    return ret_th
+    
 def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='TT',bin_edges = None,bin_weights = None,
                                       beam_fl1 = None,beam_fl2 = None, pure_E=False,pure_B=False,
                                       return_obj=False):
@@ -995,25 +1076,145 @@ def get_powers(alms1,alms2, mask_alm1, mask_alm2=None,
                pure_E = False, pure_B = False,
                return_theory_filter=False,
                lmax=None,bin_edges=None,
-               verbose=False):
+               verbose=False,
+               xlmax=2,xgllmax=2):
+    """
+    Compute decoupled angular power spectra (:math:`C_{\ell}`) from the spherical harmonics
+    of maps that have already been masked.
+
+
+    This method estimates the angular power spectrum between two input fields 
+    in harmonic space (`alm`s), accounting for mode coupling due to partial sky coverage,
+    beam smoothing, and bandpower binning. The result is a debiased, decoupled bandpower 
+    estimate suitable for direct comparison with theoretical predictions. Note that
+    a theory filter of shape (nbins,nells) needs to be applied to (nells,) shaped
+    theory spectra (no beam) if using bandpower binning. This filter can be obtained from this
+    function call, but is the most expensive part of the calculation, so consider
+    obtaining it from `self.get_theory_filter` once.
+
+
+    Parameters
+    ----------
+    alms1, alms2 : ndarray
+        Spherical-harmonic coefficients of the first and second map,
+        both with shape
+
+        * ``(N_alm,)``           – a single scalar (spin-0) field;
+        * ``(1, N_alm)``         – same as above (explicit 1-pol);
+        * ``(2, N_alm)``         – spin-2 field (*E*, *B*);
+        * ``(3, N_alm)``         – scalar + spin-2 (*T*, *E*, *B*).
+
+    The two arrays **must be identical in shape**.  If you pass the
+    *same* object twice the function returns auto-spectra.
+
+    mask_alm1 : array_like, optional
+        Spherical harmonic coefficients of the mask that was applied. Must have sufficient 
+        resolution, i.e., support at least `xlmax * lmax` in multipole space, where xlmax is
+        2 by default.  If 1d, or (1,nalm) shaped, the same mask is used for spin-0 and spin-2.
+        If (2,nalm) shaped, the first mask is used for the spin-0 field and the second for
+        the spin-2 fields.
+    mask_alm2 : array_like, optional
+        Second mask in alm space. If None, uses `mask_alm1` for both fields.
+    bin_weights : array_like, optional
+        Weights to apply when binning the resulting power spectra.
+    beam_fl1 : array_like, optional
+        Beam transfer function for the first field.
+    beam_fl2 : array_like, optional
+        Beam transfer function for the second field.
+    pure_E : bool, default=False
+        If True, apply pure-E mode estimation.
+    pure_B : bool, default=False
+        If True, apply pure-B mode estimation.
+    return_theory_filter : bool, default=False
+        If True, also return the theory bandpower filter 
+        :math:`\mathcal{F}^{s_as_b}_{q\ell}` for use in model comparison.
+    
+    lmax : int
+        Maximum multipole to consider in the analysis.
+
+    bin_edges : array_like, optional
+        Array of bin edges in multipole space for binning power spectra.
+        If provided, the spectrum will be binned accordingly. Binned
+        calculations are significantly faster. Note, these are of the form
+        low_edge <= ℓ < upper_edge.
+
+
+    verbose : bool, default=True
+        Whether to print verbose information during computation.
+
+    xlmax : int, default=2
+        Controls how far in multipole space to use mask pseudo-spectra.
+        Must be ≥2 for accurate decoupling, i.e. mask spectra need to
+        provided for at least 2 x lmax.
+
+    xgllmax : int, default=2
+        Multiplier controlling the number of Gauss-Legendre quadrature points 
+        used, relative to lmax. Should typically be ≥2 for accurate integrals.
+
+    Returns
+    -------
+    spectra : dict
+        Keys and shapes depend on the input polarisation:
+
+        * scalar–scalar -> ``{'TT': {'Cls': (nbin | lmax+1,)}}``
+        * spin-2 only   -> ``{'EE', 'EB', 'BE', 'BB'}``
+        * scalar+spin-2 -> ``{'TT', 'TE', 'ET', 'TB', 'BT',
+                              'EE', 'EB', 'BE', 'BB'}``
+
+        Each entry holds a dict with the field ``'Cls'`` containing the
+        decoupled (and possibly binned) spectrum.
+
+        If *return_theory_filter* is *True*, a second key ``'Th'`` is
+        added containing the corresponding theory filters with 
+        shape ``(n_bins, lmax+1)``.
+
+        For the pure-polarization part, the theory filter combines
+        EE, EB, BE and BB and is in spectra['ThPol']. For most cases
+        involving null EB, BE and BB, you only need the EE portion of this
+        matrix.
+
+    Raises
+    ------
+    ValueError
+        * If input alms have mismatched shapes or unsupported dimensionality.
+        * Unsupported number of polarisation components.
+        * Inconsistent mask list length.
+        * Internal binning/mixing dimensions do not match.
+    """
 
     if not(alms1.shape==alms2.shape): raise ValueError
+    if mask_alm1.ndim==1:
+        mask_alm1 = mask_alm1[None,...]
+    if mask_alm1.ndim>2: raise ValueError
+    if mask_alm1.shape[0]>2: raise ValueError
     if lmax is None:
-        if alms1.ndim==2:
-            nalm = alms1.shape[1]
-        elif alms1.ndim<=1:
-            nalm = alms1.size
-        else:
-            raise ValueError
-        lmax = hp.Alm.getlmax(nalm)
-    w = Wiggle(lmax, bin_edges=bin_edges, verbose=verbose)
-    w.add_mask('m1', mask_alm1)
-    if mask_alm2:
-        m2id = 'm2'
-        w.add_mask(m2id, mask_alm2)
+        warnings.warn(f"No lmax provided. Assuming mask_lmax // {xlmax}.")
+        nalm = mask_alm1.shape[1]
+        lmax = hp.Alm.getlmax(nalm) // xlmax
+        
+    w = Wiggle(lmax, bin_edges=bin_edges, verbose=verbose,xlmax=xlmax,xgllmax=xgllmax)
+    
+    if mask_alm1.shape[0]==1:
+        w.add_mask('m1', mask_alm1[0])
+        m1id = 'm1'
     else:
-        m2id = 'm1'
-    if bin_weights:
+        w.add_mask('m1t', mask_alm1[0])
+        w.add_mask('m1p', mask_alm1[1])
+        m1id = ['m1t','m1p']
+
+    if mask_alm2 is not None:
+        if mask_alm1.shape!=mask_alm2.shape: raise ValueError
+        if mask_alm2.shape[0]==1:
+            w.add_mask('m2', mask_alm2[0])
+            m2d = 'm2'
+        else:
+            w.add_mask('m2t', mask_alm2[0])
+            w.add_mask('m2p', mask_alm2[1])
+            m2d = ['m2t','m2p']
+    else:
+        m2id = m1id
+        
+    if bin_weights is not None:
         bwid = 'bw'
         w.add_bin_weights(bwid,bin_weights)
     else:
@@ -1028,8 +1229,7 @@ def get_powers(alms1,alms2, mask_alm1, mask_alm2=None,
         bid2 = 'p2'
     else:
         bid2 = None
-    print(alms1.shape,alms2.shape,mask_alm1.shape,lmax)
-    return w.get_powers(alms1,alms2, 'm1', mask_ids2=m2id,
+    return w.get_powers(alms1,alms2, mask_ids1=m1id, mask_ids2=m2id,
                      bin_weight_id = bwid,
                      beam_id1 = bid1, beam_id2 = bid2, pure_E = pure_E, pure_B = pure_B,
                      return_theory_filter=return_theory_filter)

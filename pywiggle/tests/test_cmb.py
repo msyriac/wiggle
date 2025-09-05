@@ -36,9 +36,9 @@ mpl.rcParams.update({
 def plot_cmb_spectra_with_residuals(
     # Theory (D_ell = l(l+1)C_l/2π) for each spectrum
     theory = {
-        "TT": {"ell": None, "Cl": None},
-        "EE": {"ell": None, "Cl": None},
-        "BB": {"ell": None, "Cl": None},
+        "TT": None,
+        "EE": None,
+        "BB": None,
     },
     # Binned measurements (centers + 1σ errors)
     data = {
@@ -88,14 +88,13 @@ def plot_cmb_spectra_with_residuals(
 
     # Plot theory curves
     for spec in ["TT", "EE", "BB"]:
-        th = theory.get(spec, {})
-        if th.get("ell") is None or th.get("Cl") is None:
-            continue
-        m = np.isfinite(th["ell"]) & np.isfinite(th["Cl"]) & (th["ell"] > 0) 
+        Cl = theory[spec]
+        ells = np.arange(Cl.size)
+        m = np.isfinite(ells) & np.isfinite(Cl) & (ells > 0) 
         if not np.any(m):
             continue
-        Dl = th["Cl"][m] * (th["ell"][m]*(th["ell"][m]+1.))/2./np.pi
-        ax.plot(th["ell"][m], Dl,
+        Dl = Cl[m] * (ells[m]*(ells[m]+1.))/2./np.pi
+        ax.plot(ells[m], Dl,
                 lw=1.8, alpha=0.9, color=spec_meta[spec]["color"],
                 label=f"{spec} (theory)")
 
@@ -195,6 +194,7 @@ def plot_cmb_spectra_with_residuals(
 
 nside = 256
 lmax = 2*nside
+tlmax = 3*nside
 
 res = 16.0 / 60. *(128/nside) # deg
 beam = res * 60. * 2 #arcmin
@@ -209,60 +209,38 @@ bin_edges = np.arange(20,lmax,40)
 # bin_edges = np.geomspace(20,lmax,30)
 cents = (bin_edges[1:] + bin_edges[:-1])/2.
 
-# Load CMB Cls ---
-#ps, ells = wutils.load_test_spectra()
 with bench.show("camb"):
-    ps = wutils.get_camb_spectra(lmax=lmax)
+    ps = wutils.get_camb_spectra(lmax=tlmax)
 ells = np.arange(ps[0,0].size)
 assert ps.shape == (3, 3, len(ells))
 
-nsims = 5
+nsims = 40
 
 
 def unpack_cls(ret):
     include_keys = ['TT','EE','TE','EB','BE','BB','TB']
     return {k: v['Cls'] for k, v in ret.items() if k in include_keys}
 
-def unpack_theory(ret,cltt,clte,clee,clbb,cleb=None):
-    ret_th = {}
-    tt_th = ret['TT']['Th']
-    lmax = tt_th.shape[1]
 
-    ret_th['TT'] = tt_th @ cltt[:lmax]
-    
-    te_th = ret['TE']['Th']
-    ret_th['TE'] = te_th @ clte[:lmax]
-    
-    ret_th['TB'] = ret_th['TE']*0.
-
-    pol_th = ret['ThPol']
-    nbins = tt_th.shape[0]
-    if cleb is None: cleb = clbb*0.
-    clpol = np.concatenate( [clee[:lmax], cleb[:lmax], cleb[:lmax], clbb[:lmax] ] )
-    bpol = pol_th @ clpol
-
-    rlist = ['EE','EB','BE','BB']
-    start = 0
-    step = nbins
-    for i,spec in enumerate(rlist):
-        end = start + step
-        ret_th[spec] = bpol[start:end]
-        if ret_th[spec].shape[0]!=step: raise ValueError
-        start = end
-    return ret_th
-
+theory = wutils.get_cldict(ps)
 
 s = stats.Statistics()
 
 for i in range(nsims):
+    print(i)
     with bench.show("sim"):
-        alm = cs.rand_alm(ps, lmax=lmax)
+        alm = cs.rand_alm(ps, lmax=tlmax)
 
         imap = cs.alm2map(alm, enmap.empty((3,)+shape, wcs,dtype=np.float32))
     if i==0:
         with bench.show("mask"):
-            _,mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg=smooth_deg)
-            mask_alm = cs.map2alm(mask,lmax=2*lmax,spin=0)
+            mask = enmap.read_map('mask.fits')
+            mask_alm = hp.read_alm('mask_alm.fits')
+            
+            # _,mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg=smooth_deg)
+            # mask_alm = cs.map2alm(mask,lmax=2*lmax,spin=0)
+            # enmap.write_map('mask.fits',mask)
+            # hp.write_alm('mask_alm.fits',mask_alm,overwrite=True)
 
     omap = imap * mask
     with bench.show("map2alm"):
@@ -275,7 +253,6 @@ for i in range(nsims):
     with bench.show("purify"):
         # Purify B
         _, pureB = pywiggle.get_pure_EB_alms(omap[1], omap[2], mask,lmax=lmax,masked_on_input=True)
-        # _, pureB = pywiggle.get_pure_EB_alms(imap[1], imap[2], mask,lmax=lmax,masked_on_input=False)
 
 
     # Get impure power
@@ -286,21 +263,27 @@ for i in range(nsims):
         s.add(spec,bcls[spec])
     
     if i==0:
-        bth = unpack_theory(ret,ps[0,0],ps[0,1],ps[1,1],ps[2,2])
+        bth = pywiggle.get_binned_theory(ret,theory)
 
     # Get pure power
     oalms[2] = pureB.copy()
     with bench.show("wiggle"):
-        ret_pure = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
+        ret_pure = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges,pure_B=True)
     bcls_pure = unpack_cls(ret_pure)
     s.add('BB pure',bcls_pure['BB'])
     if i==0:
-        bth_pure = unpack_theory(ret_pure,ps[0,0],ps[0,1],ps[1,1],ps[2,2])
+        bth_pure = pywiggle.get_binned_theory(ret_pure,theory)
+
+    # from orphics import io
+    # pl = io.Plotter('Dell',xyscale='linlin')
+    # pl.add(cents,bth['BB'])
+    # pl.add(cents,bth_pure['BB'],label='pure')
+    # pl.done('bb.png')
+    # sys.exit()
 
 s.allreduce()
 
 data = {}
-theory = {}
 binned_th = {}
 #['TT','EE','TE','BB','EB', 'TB','BB pure']
 for spec in ['TT','EE','BB','BB pure']:
@@ -318,16 +301,6 @@ for spec in ['TT','EE','BB','BB pure']:
     else:
         binned_th[spec]['Cl'] = bth[spec].copy()
 
-    theory[spec] = {}
-    theory[spec]['ell'] = ells
-    i = ['T','E','B'].index(spec[0])
-    j = ['T','E','B'].index(spec[1])
-    if spec=='EB':
-        continue
-    elif spec=='BB pure':
-        continue
-    else:
-        theory[spec]['Cl'] = ps[i,j]
     
 
 

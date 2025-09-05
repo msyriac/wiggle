@@ -301,17 +301,15 @@ def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.1):
 
     return ps
 
-def load_test_spectra():
-    """
-    Load CAMB test Cls from bundled .npz file using pkgutil (compatible with editable installs).
-    """
-    data = pkgutil.get_data("pywiggle", "data/test_camb_cl.npz")
-    if data is None:
-        raise FileNotFoundError("Could not load 'data/test_camb_cl.npz' from package.")
-    with io.BytesIO(data) as f:
-        npz = np.load(f)
-        return npz["ps"], npz["ells"]
-
+def get_cldict(ps):
+    cl_dict = {}
+    cl_dict['TT'] = ps[0,0]
+    cl_dict['TE'] = ps[0,1]
+    cl_dict['EE'] = ps[1,1]
+    cl_dict['BB'] = ps[2,2]
+    cl_dict['EB'] = ps[2,2]*0.
+    cl_dict['TB'] = ps[2,2]*0.
+    return cl_dict
 
 def cosine_apodize(bmask,width_deg):
     r = width_deg * np.pi / 180.

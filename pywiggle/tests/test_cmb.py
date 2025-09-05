@@ -12,6 +12,7 @@ from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
 from orphics import io, stats # !!!
 
+np.random.seed(100)
 
 mpl.rcParams.update({
     "figure.dpi": 300,
@@ -19,7 +20,7 @@ mpl.rcParams.update({
     "font.size": 9,
     "font.family": "serif",
     "font.serif": ["DejaVu Serif", "Computer Modern Roman", "Times New Roman"],
-    "mathtext.fontset": "dejavuserif",   # makes math match serif text
+    "mathtext.fontset": "dejavuserif",
     "mathtext.rm": "serif",
     "axes.labelsize": 9,
     "axes.titlesize": 11,
@@ -33,37 +34,24 @@ mpl.rcParams.update({
 })
 
 
+
 def plot_cmb_spectra_with_residuals(
-    # Theory (D_ell = l(l+1)C_l/2π) for each spectrum
-    theory = {
-        "TT": None,
-        "EE": None,
-        "BB": None,
-    },
-    # Binned measurements (centers + 1σ errors)
-    data = {
-        "TT": {"ell": None, "Cl": None, "yerr": None},
-        "EE": {"ell": None, "Cl": None, "yerr": None},
-        "BB": {"ell": None, "Cl": None, "yerr": None},
-    },
-    binned_th = {
-        "TT": {"ell": None, "Cl": None},
-        "EE": {"ell": None, "Cl": None},
-        "BB": {"ell": None, "Cl": None},
-    },
-    # Axis limits & labels
-    ell_min = 15, ell_max = 3000,
-    Dl_min = 1e-3, Dl_max = 1e4,  # μK^2
-    figsize = (6.0, 5.0),
-        title = None, plot_name='plot.png'
+        theory,
+        data,
+        binned_th,
+        ell_min = 15, ell_max = 3000,
+        Dl_min = 1e-3, Dl_max = 1e4,  # μK^2
+        figsize = (6.0, 5.0),
+        title = None, plot_name='plot.png',xscale="log"
 ):
     # Colors & labels
     spec_meta = {
         "TT": {"color": "#1f77b4", "label": "TT"},
         "EE": {"color": "#2ca02c", "label": "EE"},
         "BB": {"color": "#d62728", "label": "BB"},
-        "BB pure": {"color": "#d65050", "label": "BB pure"},
+        "BB pure": {"color": "orange", "label": "BB pure"},
     }
+    
 
     # Build figure with skinny residuals panel
     fig = plt.figure(figsize=figsize, constrained_layout=False)
@@ -73,14 +61,13 @@ def plot_cmb_spectra_with_residuals(
     axb = fig.add_subplot(gs[2], sharex=ax)
 
     # MAIN PANEL: log-log theory + data
-    ax.set_xscale("linear")
+    ax.set_xscale(xscale)
     ax.set_yscale("log")
     ax.set_xlim(ell_min, ell_max)
-    # ax.set_ylim(Dl_min, Dl_max)
 
     # Grid tuned for log axes
     ax.grid(True, which="both", ls="-", lw=0.4, alpha=0.25)
-    ax.set_ylabel(r"$D_\ell [\mu\mathrm{K}^2]$")
+    ax.set_ylabel(r"$D_l [\mu\mathrm{K}^2]$")
 
     # Tick behavior: minor labels off for x-log to reduce clutter
     ax.xaxis.set_minor_formatter(NullFormatter())
@@ -95,10 +82,10 @@ def plot_cmb_spectra_with_residuals(
             continue
         Dl = Cl[m] * (ells[m]*(ells[m]+1.))/2./np.pi
         ax.plot(ells[m], Dl,
-                lw=1.8, alpha=0.9, color=spec_meta[spec]["color"],
-                label=f"{spec} (theory)")
+                lw=1.8, alpha=0.9, color=spec_meta[spec]["color"])
 
     # Plot binned data with error bars
+    markersize=5
     dspecs = data.keys()
     for spec, marker in zip(dspecs, ["o", "s", "^","d"]):
         d = data.get(spec, {})
@@ -114,28 +101,29 @@ def plot_cmb_spectra_with_residuals(
         if yerr is not None:
             yerr_use = np.array(yerr)[m]
         ax.errorbar(ell[m], Dl[m], yerr=yerr_use,
-                    fmt=marker, ms=3.5, lw=0.9, mec="none",
+                    fmt=marker, ms=markersize, mec="none",
                     alpha=0.95, color=spec_meta[spec]["color"],
-                    label=f"{spec} (data)")
+                    label=f"{spec}")
 
     if title:
         ax.set_title(title, pad=6)
 
     # LEGEND
-    bbox_to_anchor=(1, 0.5)
-    ax.legend(ncols=2, frameon=1, loc="center left", handlelength=1.6,numpoints=1,bbox_to_anchor=bbox_to_anchor)
+    # bbox_to_anchor=(1, 0.5)
+    # ax.legend(ncols=2, frameon=1, loc="center left", handlelength=1.6,numpoints=1,bbox_to_anchor=bbox_to_anchor)
+    ax.legend(ncols=2, frameon=1, loc="center left", handlelength=1.6,numpoints=1)
 
 
     # RESIDUALS PANEL: (data - theory)/theory, semilogx (log x, linear y)
     axr.axhline(0.0, color="k", lw=1.0, alpha=0.8, ls='--')
-    axr.set_xscale("linear")
+    axr.set_xscale(xscale)
     axr.set_xlim(ell_min, ell_max)
-    axr.set_ylabel(r"$\Delta C_{\ell}/C_{\ell}$")
-    axr.set_xlabel(r"Multipole $\ell$")
+    axr.set_ylabel(r"$\Delta C_{l}/C_{l}$")
+    axr.set_xlabel(r"Multipole $l$")
     axr.grid(True, which="both", ls="-", lw=0.4, alpha=0.25)
 
     # Small y-range centered on 0 for clarity; adjust as needed
-    # axr.set_ylim(-0.4, 0.4)
+    axr.set_ylim(-0.2, 0.2)
     axr.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 
     # Compute & plot residuals for each spectrum where theory exists
@@ -164,21 +152,22 @@ def plot_cmb_spectra_with_residuals(
         if yerr_d is not None:
             yerr_frac = np.array(yerr_d)[m][good] / Cl_th[good]
             
-        off = np.linspace(-5,5,nspec)[i]
+        #off = np.linspace(-5,5,nspec)[i]
+        off = 0.
         axr.errorbar(ell_d[m][good]+off, resid, yerr=yerr_frac,
-                     fmt=marker, ms=3.0, lw=0.9, mec="none",
+                     fmt=marker, ms=markersize, mec="none",
                      alpha=0.95, color=spec_meta[spec]["color"])
         i = i + 1
 
     axb.axhline(1.0, color="k", lw=1.0, alpha=0.8, ls='--')
     axb.plot(data['BB pure']['ell'], data['BB pure']['yerr']/data['BB']['yerr'],
             lw=1.8, alpha=0.9, color=spec_meta['BB pure']["color"],
-            label=f"BB pure uncertainty ratio")
+             label=f"BB pure uncertainty ratio",marker='d',ms=markersize)
     
-    axb.set_xscale("linear")
+    axb.set_xscale(xscale)
     axb.set_xlim(ell_min, ell_max)
-    axb.set_ylabel(r"$\sigma(C_{\ell}^{\rm pure})/\sigma(C_{\ell})$")
-    axb.set_xlabel(r"Multipole $\ell$")
+    axb.set_ylabel(r"$\sigma(C_{l}^{\rm pure})/\sigma(C_{l})$")
+    axb.set_xlabel(r"Multipole $l$")
     axb.grid(True, which="both", ls="-", lw=0.4, alpha=0.25)
         
 
@@ -188,11 +177,10 @@ def plot_cmb_spectra_with_residuals(
     fig.subplots_adjust(left=0.12, right=0.98, top=0.96, bottom=0.12, hspace=0.02)
     plt.savefig(plot_name,bbox_inches='tight')
     plt.close()
-    # return fig, (ax, axr)
 
 
 
-nside = 256
+nside = 512
 lmax = 2*nside
 tlmax = 3*nside
 
@@ -205,16 +193,18 @@ apod_deg = 10.0
 smooth_deg = 10.0
 radius_deg = np.sqrt(area_deg2 / np.pi)
 
-bin_edges = np.arange(20,lmax,40)
-# bin_edges = np.geomspace(20,lmax,30)
+bin_edges = np.append(np.append(np.geomspace(2,200,10),np.arange(240,2000,40)),np.arange(2250,8000,250))
+bin_edges = bin_edges[bin_edges<lmax]
 cents = (bin_edges[1:] + bin_edges[:-1])/2.
+
+
 
 with bench.show("camb"):
     ps = wutils.get_camb_spectra(lmax=tlmax)
 ells = np.arange(ps[0,0].size)
 assert ps.shape == (3, 3, len(ells))
 
-nsims = 40
+nsims = 1
 
 
 def unpack_cls(ret):
@@ -234,13 +224,17 @@ for i in range(nsims):
         imap = cs.alm2map(alm, enmap.empty((3,)+shape, wcs,dtype=np.float32))
     if i==0:
         with bench.show("mask"):
-            mask = enmap.read_map('mask.fits')
-            mask_alm = hp.read_alm('mask_alm.fits')
-            
-            # _,mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg=smooth_deg)
-            # mask_alm = cs.map2alm(mask,lmax=2*lmax,spin=0)
-            # enmap.write_map('mask.fits',mask)
-            # hp.write_alm('mask_alm.fits',mask_alm,overwrite=True)
+            try:
+                mask = enmap.read_map(f'mask_{nside}.fits')
+                mask_alm = hp.read_alm(f'mask_alm_{nside}.fits')
+            except:
+                _,mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg=smooth_deg)
+                mask_alm = cs.map2alm(mask,lmax=2*lmax,spin=0)
+                enmap.write_map(f'mask_{nside}.fits',mask)
+                hp.write_alm(f'mask_alm_{nside}.fits',mask_alm,overwrite=True)
+                
+        with bench.show("purify init"):
+            ebp = pywiggle.EBPurifier(mask,lmax)
 
     omap = imap * mask
     with bench.show("map2alm"):
@@ -252,7 +246,7 @@ for i in range(nsims):
 
     with bench.show("purify"):
         # Purify B
-        _, pureB = pywiggle.get_pure_EB_alms(omap[1], omap[2], mask,lmax=lmax,masked_on_input=True)
+        _, pureB = ebp.project(omap[1], omap[2],masked_on_input=True)
 
 
     # Get impure power
@@ -274,13 +268,6 @@ for i in range(nsims):
     if i==0:
         bth_pure = pywiggle.get_binned_theory(ret_pure,theory)
 
-    # from orphics import io
-    # pl = io.Plotter('Dell',xyscale='linlin')
-    # pl.add(cents,bth['BB'])
-    # pl.add(cents,bth_pure['BB'],label='pure')
-    # pl.done('bb.png')
-    # sys.exit()
-
 s.allreduce()
 
 data = {}
@@ -292,7 +279,7 @@ for spec in ['TT','EE','BB','BB pure']:
     data[spec] = {}
     data[spec]['ell'] = cents
     data[spec]['Cl'] = y.copy()
-    data[spec]['yerr'] = yerr.copy()
+    data[spec]['yerr'] = yerr.copy()/np.sqrt(nsims)
 
     binned_th[spec] = {}
     binned_th[spec]['ell'] = cents

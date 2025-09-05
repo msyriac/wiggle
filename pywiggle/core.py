@@ -928,146 +928,227 @@ def get_coupling_matrix_from_mask_cls(mask_cls,lmax,spintype='TT',bin_edges = No
 
 
 def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
-           return_mask=False, lmax=None,
-           eps=1e-4):
-
+                     return_mask=False, lmax=None, eps=1e-4):
     """
-    Perform pure E/B mode decomposition on a masked polarization map. Adapted
-    from code by Will Coulton and Irene Abril-Cabeszas.
+    Perform pure E/B mode decomposition on a masked polarization map.
 
-    Implements the Smith & Zaldarriaga (2007) formalism to compute 
-    "pure" E and B-mode multipoles from Q/U Stokes parameter maps 
-    using an apodized mask, removing ambiguous modes due to masking.
+    This is a thin wrapper that preserves the original API by instantiating
+    a precomputing projector class under the hood. Expensive, mask-dependent
+    quantities (mask spin-derivatives and related harmonic factors) are
+    constructed once during class initialization.
 
     Parameters
     ----------
-    Q : ndarray or enmap
-        Stokes Q polarization map. Should be masked if `masked_on_input=True`.
-    U : ndarray or enmap
-        Stokes U polarization map. Same shape and type as Q.
-    mask : ndarray
-        Scalar apodized mask, typically smoothed to avoid ringing.
-        Should be in the same geometry as Q and U (Healpix or enmap).
+    Qmap : ndarray or enmap
+        Stokes Q polarization map. If `masked_on_input=True`, this is
+        assumed to have already been multiplied by `mask`.
+    Umap : ndarray or enmap
+        Stokes U polarization map. Same geometry as `Qmap`.
+    mask : ndarray or enmap
+        Scalar apodized mask in the same geometry as `Qmap` and `Umap`.
     masked_on_input : bool, optional
-        If True, assumes Q and U have already been multiplied by mask.
-        If False, the code will divide out the mask (with threshold protection).
-        Default is True.
+        If True, assumes Q and U have already been multiplied by `mask`
+        and divides it out (with threshold protection) internally.
+        Default is False.
     return_mask : bool, optional
         If True, returns the spin-1 and spin-2 derivatives of the mask
-        instead of the pure E/B multipoles. Useful for debugging.
+        used in the purification, instead of the pure E/B multipoles.
         Default is False.
     lmax : int or None, optional
-        Maximum multipole to compute. If None, defaults to half the Nyquist
-        limit of the map.
-    tiny : float, optional
-        Threshold below which mask values are treated as zero to avoid
-        division by very small values. Default is 1e-4.
+        Maximum multipole to compute. If None, it defaults to
+        pi/pixel_size/2 based on the input map geometry.
+    eps : float, optional
+        Threshold below which mask values are treated as zero when
+        dividing out the mask. Default is 1e-4.
 
     Returns
     -------
-    pureE_alms : ndarray
-        Spherical harmonic coefficients of the purified E-mode signal,
-        shape consistent with `cs.alm_info(lmax)`.
-    pureB_alms : ndarray
-        Spherical harmonic coefficients of the purified B-mode signal.
-    
-    OR
-
-    mask_1, mask_2 : ndarray
-        If `return_mask=True`, returns the spin-1 and spin-2 derivatives 
-        of the mask (used in the purification process) instead of pureE/B.
+    (pureE_alms, pureB_alms) : tuple of ndarrays
+        Spherical harmonic coefficients of the purified E- and B-mode signals.
+        If `return_mask=True`, returns `(mask1, mask2)` instead, where
+        `mask1` and `mask2` are the spin-1 and spin-2 derivatives of the mask.
 
     Notes
     -----
-    - Requires the `pixell` library for spherical harmonic transforms and 
+    - Requires the `pixell` library for spherical harmonic transforms and
       map handling.
-    - This method suppresses E->B leakage caused by the mask, and
-      is critical for detecting weak B-mode signals like those from 
-      primordial gravitational waves.
-    - Based on the formalism in:
-        * Smith, Kendrick M. "Pseudo-Cl estimators which do not mix 
-          E and B modes." Phys. Rev. D 74.8 (2006): 083002.
-        * Smith & Zaldarriaga, Phys. Rev. D 76.4 (2007): 043001.
-
-    Examples
-    --------
-    >>> pureE_alms, pureB_alms = get_pure_EB_alms(Qmap, Umap, apod_mask, is_healpix=True)
-    
-    >>> mask_1, mask_2 = get_pure_EB_alms(Qmap, Umap, apod_mask, return_mask=True)
+    - Implements the Smith & Zaldarriaga (2007) pure E/B formalism to
+      suppress E->B leakage induced by masking.
     """
     from pixell import enmap, curvedsky as cs
 
-
-
-    def spins(alm2map, alm, mp12, spin):
-        if spin == 0:
-            assert(0)
-        SP, SM = alm2map(np.array([-alm, alm*0.]), mp12, spin=abs(spin))
-        return SP + 1j*SM if spin > 0 else SP - 1j*SM
-
-    # Un-mask input maps if needed
-    if masked_on_input:
-        good = mask > eps
-        Q = enmap.enmap(np.where(good, Qmap / mask, 0.0), Qmap.wcs)
-        U = enmap.enmap(np.where(good, Umap / mask, 0.0), Umap.wcs)
-    else:
-        Q = Qmap
-        U = Umap
-
-    slmax = int(np.min(np.pi / Q.pixshape() / 2))
+    # Determine a safe default lmax from pixelization if not provided
+    # (match the original behavior and warnings).
     if lmax is None:
+        slmax = int(np.min(np.pi / enmap.enmap(Qmap, Qmap.wcs).pixshape() / 2))
         lmax = slmax
     else:
-        if lmax>slmax: warnings.warn(f"Your pixelization supports lmax={slmax} but you have requested {lmax}. You will likely have excess power on large scales! E/B purification requires accurate SHTs, so an lmax of pi/pix_size/2 is recommended.")
-    map2alm, alm2map = cs.map2alm, cs.alm2map
-    template = enmap.zeros((2,) + Q.shape, wcs=Q.wcs,dtype=np.float64)
+        slmax = int(np.min(np.pi / enmap.enmap(Qmap, Qmap.wcs).pixshape() / 2))
+        if lmax > slmax:
+            warnings.warn(
+                "Your pixelization supports lmax={} but you have requested {}. "
+                "You will likely have excess power on large scales. "
+                "E/B purification requires accurate SHTs, so an lmax of "
+                "pi/pix_size/2 is recommended.".format(slmax, lmax)
+            )
 
-    ainfo = cs.alm_info(lmax)
-    ells  = np.arange(lmax+1, dtype=np.float64)
+    projector = EBPurifier(mask=mask, lmax=lmax, eps=eps)
 
-    # Mask derivatives
-    wAlm = map2alm(mask, ainfo=ainfo, spin=0)
-
-    fac1 = np.zeros_like(ells)
-    fac1[1:] = np.sqrt(ells[1:] * (ells[1:] + 1))
-    fac2 = np.zeros_like(ells)
-    fac2[2:] = np.sqrt((ells[2:] - 1)*ells[2:]*(ells[2:] + 1)*(ells[2:] + 2))
-                                                 
-
-    wAlm1 = ainfo.lmul(wAlm.copy(), fac1)        
-    wAlm2 = ainfo.lmul(wAlm.copy(), fac2)        
-
-    mask1 = spins(alm2map, wAlm1, template*0, 1) 
-    mask2 = spins(alm2map, wAlm2, template*0, 2) 
-    mask1[mask < eps] = 0.0                    
-    mask2[mask < eps] = 0.0
     if return_mask:
-        return mask1, mask2
+        return projector.mask1, projector.mask2
 
-    template[...] = (Q*mask, U*mask)
-    E2, B2 = map2alm(template, ainfo=ainfo, spin=2)
+    return projector.project(Qmap, Umap, masked_on_input=masked_on_input)
 
-    template[...] = (Q*mask1.real + U*mask1.imag,
-                     U*mask1.real - Q*mask1.imag)
-    E1, B1 = map2alm(template, ainfo=ainfo, spin=1)
 
-    E0 = map2alm(Q*mask2.real + U*mask2.imag, ainfo=ainfo, spin=0)
-    B0 = map2alm(U*mask2.real - Q*mask2.imag, ainfo=ainfo, spin=0)
+class EBPurifier(object):
+    """
+    Precomputes mask-dependent operators for pure E/B projection.
 
-    alpha = np.zeros_like(ells)
-    alpha[2:] = 2.0 * np.sqrt(1.0 / ((ells[2:] + 2)*(ells[2:] - 1)))
-    beta  = np.zeros_like(ells)
-    beta[2:]  = np.sqrt(1.0 / ((ells[2:] + 2)*(ells[2:] + 1)*ells[2:]*(ells[2:] - 1)))
+    This class builds the spherical-harmonic mask derivatives and
+    l-space weights once. Subsequent calls to `project` only perform
+    the per-map transforms.
 
-    pureE_alms = E2 + ainfo.lmul(E1, alpha) - ainfo.lmul(E0, beta)
-    pureB_alms = B2 + ainfo.lmul(B1, alpha) - ainfo.lmul(B0, beta)
+    Parameters
+    ----------
+    mask : ndarray or enmap
+        Scalar apodized mask, same geometry as the input maps.
+    lmax : int
+        Maximum multipole.
+    eps : float
+        Threshold for mask safety when dividing.
+    """
+    def __init__(self, mask, lmax, eps=1e-4):
+        from pixell import enmap, curvedsky as cs
 
-    # Strip monopole / dipole
-    killMD = np.ones_like(ells); killMD[:2] = 0.0
-    pureE_alms  = ainfo.lmul(pureE_alms, killMD)
-    pureB_alms  = ainfo.lmul(pureB_alms, killMD)
+        self.mask = mask
+        self.eps = eps
+        self.lmax = int(lmax)
 
-    return pureE_alms, pureB_alms
+        self.cs = cs
+        self.enmap = enmap
+
+        # Geometry/template derived from the mask
+        self.template = enmap.zeros((2,) + mask.shape, wcs=mask.wcs, dtype=np.float64)
+        self.mp12 = self.template * 0  # zero template for alm2map spin helper
+
+        # Harmonic bookkeeping
+        self.ainfo = cs.alm_info(self.lmax)
+        self.ells = np.arange(self.lmax + 1, dtype=np.float64)
+
+        # Precompute mask harmonic derivatives (expensive)
+        self.map2alm = cs.map2alm
+        self.alm2map = cs.alm2map
+
+        walm = self.map2alm(mask, ainfo=self.ainfo, spin=0)
+
+        fac1 = np.zeros_like(self.ells)
+        fac1[1:] = np.sqrt(self.ells[1:] * (self.ells[1:] + 1))
+        fac2 = np.zeros_like(self.ells)
+        fac2[2:] = np.sqrt(
+            (self.ells[2:] - 1)
+            * self.ells[2:]
+            * (self.ells[2:] + 1)
+            * (self.ells[2:] + 2)
+        )
+
+        walm1 = self.ainfo.lmul(walm.copy(), fac1)
+        walm2 = self.ainfo.lmul(walm.copy(), fac2)
+
+        self.mask1 = self._spins(walm1, spin=1)
+        self.mask2 = self._spins(walm2, spin=2)
+
+        # Zero out where the mask is tiny to avoid numerical issues
+        tiny = mask < self.eps
+        self.mask1[tiny] = 0.0
+        self.mask2[tiny] = 0.0
+
+        # Precompute ell-space weights
+        self.alpha = np.zeros_like(self.ells)
+        self.alpha[2:] = 2.0 * np.sqrt(1.0 / ((self.ells[2:] + 2) * (self.ells[2:] - 1)))
+
+        self.beta = np.zeros_like(self.ells)
+        self.beta[2:] = np.sqrt(
+            1.0
+            / (
+                (self.ells[2:] + 2)
+                * (self.ells[2:] + 1)
+                * self.ells[2:]
+                * (self.ells[2:] - 1)
+            )
+        )
+
+        self.kill_md = np.ones_like(self.ells)
+        self.kill_md[:2] = 0.0
+
+    def _spins(self, alm, spin):
+        """
+        Convert alm into a complex spin-s map using alm2map, following the
+        original helper logic.
+        """
+        if spin == 0:
+            raise ValueError("spin must be nonzero")
+        sp, sm = self.alm2map(np.array([-alm, alm * 0.0]), self.mp12, spin=abs(spin))
+        if spin > 0:
+            return sp + 1j * sm
+        else:
+            return sp - 1j * sm
+
+    def project(self, Qmap, Umap, masked_on_input=False):
+        """
+        Compute pure E/B multipoles for the provided Q/U maps using the
+        precomputed mask operators.
+
+        Parameters
+        ----------
+        Qmap, Umap : ndarray or enmap
+            Input Stokes Q/U maps. If `masked_on_input=True`, they are assumed
+            to have already been multiplied by `mask`.
+        masked_on_input : bool, optional
+            If True, divides out `mask` (with threshold protection) before
+            building pure estimators. Default is False.
+
+        Returns
+        -------
+        pureE_alms, pureB_alms : ndarrays
+            Purified E- and B-mode alm arrays.
+        """
+        enmap = self.enmap
+        cs = self.cs
+
+        # Unmask if required
+        if masked_on_input:
+            good = self.mask > self.eps
+            with np.errstate(invalid="ignore", divide="ignore"):
+                Q = enmap.enmap(np.where(good, Qmap / self.mask, 0.0), enmap.enmap(Qmap, Qmap.wcs).wcs)
+                U = enmap.enmap(np.where(good, Umap / self.mask, 0.0), enmap.enmap(Umap, Umap.wcs).wcs)
+        else:
+            Q = Qmap
+            U = Umap
+
+        # Spin-2 piece with the scalar mask
+        self.template[...] = (Q * self.mask, U * self.mask)
+        E2, B2 = self.map2alm(self.template, ainfo=self.ainfo, spin=2)
+
+        # Spin-1 piece with mask1
+        self.template[...] = (Q * self.mask1.real + U * self.mask1.imag,
+                              U * self.mask1.real - Q * self.mask1.imag)
+        E1, B1 = self.map2alm(self.template, ainfo=self.ainfo, spin=1)
+
+        # Spin-0 piece with mask2
+        E0 = self.map2alm(Q * self.mask2.real + U * self.mask2.imag, ainfo=self.ainfo, spin=0)
+        B0 = self.map2alm(U * self.mask2.real - Q * self.mask2.imag, ainfo=self.ainfo, spin=0)
+
+        # Combine to build pure estimators
+        pureE = E2 + self.ainfo.lmul(E1, self.alpha) - self.ainfo.lmul(E0, self.beta)
+        pureB = B2 + self.ainfo.lmul(B1, self.alpha) - self.ainfo.lmul(B0, self.beta)
+
+        # Remove monopole/dipole
+        pureE = self.ainfo.lmul(pureE, self.kill_md)
+        pureB = self.ainfo.lmul(pureB, self.kill_md)
+
+        return pureE, pureB
+
+
 
 
 def get_powers(alms1,alms2, mask_alm1, mask_alm2=None,

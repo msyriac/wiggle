@@ -266,15 +266,9 @@ def wfactor(n,mask,sht=True,pmap=None,equal_area=False):
             pmap = enmap.pixsizemap(mask.shape,mask.wcs)
     return np.sum((mask**n)*pmap) /np.pi / 4. if sht else np.sum((mask**n)*pmap) / np.sum(pmap)
 
-def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.1):
+def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.05):
     """
     Returns CMB Cls [TT, EE, BB, TE] from CAMB with low accuracy for fast testing.
-    This function is included for completeness to show how the power spectra used
-    in this test were generated.
-
-    >> ps = get_camb_spectra(lmax=lmax, r=0.05)  # r sets BB amplitude
-    >> ells = np.arange(ps.shape[-1])
-    >> np.savez_compressed("pywiggle/data/test_camb_cl.npz", ps=ps, ells=ells)
     
     """
     import camb
@@ -285,8 +279,8 @@ def get_camb_spectra(lmax=512, tensor=True, ns=0.965, As=2e-9, r=0.1):
     pars.InitPower.set_params(As=As, ns=ns, r=r)
     pars.set_for_lmax(lmax, lens_potential_accuracy=1)
     pars.WantTensors = tensor
-    pars.AccuracyBoost = 0.1
-    pars.lAccuracyBoost = 0.1
+    pars.AccuracyBoost = 1
+    pars.lAccuracyBoost = 1
     pars.HighAccuracyDefault = False
 
     results = camb.get_results(pars)

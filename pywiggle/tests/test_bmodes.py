@@ -22,7 +22,7 @@ def test_recover_tensor_Bmode():
     mlmax = 2*nside
     hpixdiv = 1
     cardiv = 1
-    nsims = 3
+    nsims = 40
 
     area_deg2 = 4000.
     apod_deg = 10.0
@@ -135,14 +135,6 @@ def test_recover_tensor_Bmode():
         results["Namaster BB pure decoupled (healpix)"].append(cl_yp_nmt[3].copy())
         results["Wiggle BB pure decoupled (CAR)"].append(cl_bb_wig_p.copy())
         results["Wiggle BB impure decoupled (CAR)"].append(cl_bb_wig_i.copy())
-
-        from orphics import io
-        pl = io.Plotter('Cell')
-        print(bth_pure['BB'])
-        pl.add(leff,bth['BB']*leff*(leff+1.)/2./np.pi,label='binned BB theory',marker='x',color='r',ls='none')
-        pl.add(leff+5,bth_pure['BB']*leff*(leff+1.)/2./np.pi,label='binned BB theory pure',marker='x',color='b',ls='none')
-        pl.done('bb.png')
-        sys.exit()
 
         
         

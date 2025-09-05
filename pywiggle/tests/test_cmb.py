@@ -10,7 +10,7 @@ import healpy as hp
 from collections import defaultdict
 from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 
-from orphics import io, stats # !!!
+from orphics import io, stats, mpi, maps
 
 np.random.seed(100)
 
@@ -180,7 +180,7 @@ def plot_cmb_spectra_with_residuals(
 
 
 
-nside = 512
+nside = 2048
 lmax = 2*nside
 tlmax = 3*nside
 
@@ -193,7 +193,7 @@ apod_deg = 10.0
 smooth_deg = 10.0
 radius_deg = np.sqrt(area_deg2 / np.pi)
 
-bin_edges = np.append(np.append(np.geomspace(2,200,10),np.arange(240,2000,40)),np.arange(2250,8000,250))
+bin_edges = np.append(np.append(np.geomspace(2,200,10),np.arange(240,2400,60)),np.arange(2550,8000,150))
 bin_edges = bin_edges[bin_edges<lmax]
 cents = (bin_edges[1:] + bin_edges[:-1])/2.
 
@@ -204,8 +204,8 @@ with bench.show("camb"):
 ells = np.arange(ps[0,0].size)
 assert ps.shape == (3, 3, len(ells))
 
-nsims = 1
-
+nsims = 120
+comm,rank,my_tasks = mpi.distribute(nsims)
 
 def unpack_cls(ret):
     include_keys = ['TT','EE','TE','EB','BE','BB','TB']
@@ -214,10 +214,10 @@ def unpack_cls(ret):
 
 theory = wutils.get_cldict(ps)
 
-s = stats.Statistics()
+s = stats.Statistics(comm)
 
-for i in range(nsims):
-    print(i)
+for i,task in enumerate(my_tasks):
+    print(rank,task,i)
     with bench.show("sim"):
         alm = cs.rand_alm(ps, lmax=tlmax)
 
@@ -228,10 +228,12 @@ for i in range(nsims):
                 mask = enmap.read_map(f'mask_{nside}.fits')
                 mask_alm = hp.read_alm(f'mask_alm_{nside}.fits')
             except:
-                _,mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg=smooth_deg)
+                mask = maps.circular_mask(shape,wcs,(0.,0.),radius_deg,apod_deg,smooth_deg,lmax=tlmax)
+                # _,mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg=smooth_deg)
                 mask_alm = cs.map2alm(mask,lmax=2*lmax,spin=0)
-                enmap.write_map(f'mask_{nside}.fits',mask)
-                hp.write_alm(f'mask_alm_{nside}.fits',mask_alm,overwrite=True)
+                if rank==0:
+                    enmap.write_map(f'mask_{nside}.fits',mask)
+                    hp.write_alm(f'mask_alm_{nside}.fits',mask_alm,overwrite=True)
                 
         with bench.show("purify init"):
             ebp = pywiggle.EBPurifier(mask,lmax)
@@ -240,7 +242,7 @@ for i in range(nsims):
     with bench.show("map2alm"):
         oalms = cs.map2alm(omap,lmax=lmax,spin=[0,2])
 
-    if i==0 and lmax<256:
+    if i==0 and lmax<512 and rank==0:
         for j in range(3): wutils.hplot(imap[j],f'imap_{j}',grid=True,ticks=20)
         wutils.hplot(mask,f'mask',grid=True,ticks=20)
 
@@ -270,30 +272,31 @@ for i in range(nsims):
 
 s.allreduce()
 
-data = {}
-binned_th = {}
-#['TT','EE','TE','BB','EB', 'TB','BB pure']
-for spec in ['TT','EE','BB','BB pure']:
-    y = s.mean(spec)
-    yerr = np.sqrt(s.var(spec))
-    data[spec] = {}
-    data[spec]['ell'] = cents
-    data[spec]['Cl'] = y.copy()
-    data[spec]['yerr'] = yerr.copy()/np.sqrt(nsims)
+if rank==0:
+    data = {}
+    binned_th = {}
+    #['TT','EE','TE','BB','EB', 'TB','BB pure']
+    for spec in ['TT','EE','BB','BB pure']:
+        y = s.mean(spec)
+        yerr = np.sqrt(s.var(spec))
+        data[spec] = {}
+        data[spec]['ell'] = cents
+        data[spec]['Cl'] = y.copy()
+        data[spec]['yerr'] = yerr.copy()/np.sqrt(nsims)
 
-    binned_th[spec] = {}
-    binned_th[spec]['ell'] = cents
-    if spec=='BB pure':
-        binned_th[spec]['Cl'] = bth_pure['BB'].copy()
-    else:
-        binned_th[spec]['Cl'] = bth[spec].copy()
-
-    
+        binned_th[spec] = {}
+        binned_th[spec]['ell'] = cents
+        if spec=='BB pure':
+            binned_th[spec]['Cl'] = bth_pure['BB'].copy()
+        else:
+            binned_th[spec]['Cl'] = bth[spec].copy()
 
 
-plot_cmb_spectra_with_residuals(
-    theory,
-    data,
-    binned_th,
-    ell_max=lmax)
-        
+
+
+    plot_cmb_spectra_with_residuals(
+        theory,
+        data,
+        binned_th,
+        ell_max=lmax)
+

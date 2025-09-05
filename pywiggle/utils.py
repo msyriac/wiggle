@@ -377,36 +377,6 @@ def mollview(hp_map,filename=None,lim=None,coord='C',verbose=True,return_project
     if return_projected_map: return retimg
 
 
-def get_mask(nside,shape,wcs,radius_deg,apo_width_deg,smooth_deg=None,lon_c = 0.0, lat_c = 0.0, hp_file=None):
-    # centre on the equator by default
-    import pymaster as nmt
-    from pixell import reproject
-
-    if hp_file is None:
-        # 3-vector that points to the disc centre
-        vec  = hp.ang2vec(lon_c, lat_c, lonlat=True)
-
-        # Pixels that fall inside the hard (binary) disc
-        pix_disc = hp.query_disc(nside, vec,
-                                 np.radians(radius_deg), inclusive=True)
-
-        # Build the binary mask
-        npix       = hp.nside2npix(nside)
-        mask_bin   = np.zeros(npix, dtype=np.float32)
-        mask_bin[pix_disc] = 1.0
-
-        if smooth_deg:
-            mask_bin = hp.smoothing(mask_bin,np.deg2rad(smooth_deg))
-
-        # C1-apodise it with NaMaster
-        mask_C1 = nmt.mask_apodization(mask_bin,
-                                       apo_width_deg,
-                                       apotype="C1")
-    else:
-        mask_C1 = hp.read_map(hp_file)
-    mask_C1_rect = reproject.healpix2map(mask_C1,shape,wcs,method='spline',order=1)
-    return mask_C1,mask_C1_rect
-
 """
 =========
 Helpers

@@ -8,7 +8,7 @@ import pywiggle
 import io,sys
 import healpy as hp
 from collections import defaultdict
-
+from orphics import maps
 
 def test_recover_tensor_Bmode():
     import pymaster as nmt
@@ -45,7 +45,9 @@ def test_recover_tensor_Bmode():
         return cl_decoupled
     
 
-    maskh, mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg)
+    #maskh, mask = wutils.get_mask(nside,shape,wcs,radius_deg,apod_deg,smooth_deg)
+    mask = maps.circular_mask(shape,wcs,(0.,0.),radius_deg,apod_deg,smooth_deg,lmax=lmax)
+    maskh = reproject.map2healpix(mask,nside=nside,method='spline',order=1)
     # wutils.hplot(mask,'mask',grid=True,colorbar=True,downgrade=4,ticks=30)
     
     # Mode decoupling

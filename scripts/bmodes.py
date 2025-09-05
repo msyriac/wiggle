@@ -1,7 +1,4 @@
 #%%
-%load_ext autoreload
-%autoreload 2
-#%%
 import pywiggle 
 from pywiggle import utils as wutils
 from pixell import enmap, utils as u, curvedsky as cs

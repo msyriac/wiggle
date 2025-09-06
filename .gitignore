@@ -1,0 +1,7 @@
+*.sh
+*.txt
+*.png
+*.npz
+*.h5
+*.fits
+*.csv

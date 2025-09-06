@@ -10,9 +10,12 @@ import numpy as np
 import healpy as hp
 import ducc0
 import pytest
-
 import pywiggle
 from pywiggle import utils
+import warnings
+from pspy.mcm_fortran.mcm_fortran import mcm_compute as mcm_fortran
+
+    
 
 
 # Copied these from mreinecke/ducc0
@@ -24,6 +27,20 @@ def tri2full(tri, lmax):
         res[:,:,l1,l1:] = lfac[l1:] * tri[:,:, startidx+l1:startidx+lmax+1]
         res[:,:,l1:,l1] = (2*l1+1) * tri[:,:, startidx+l1:startidx+lmax+1]
     return res
+
+def mcm00_pspy(spec, lmax):
+    nspec = spec.shape[0]
+    lrange_spec = np.arange(spec.shape[1])
+    res=np.zeros((nspec, lmax+1, lmax+1))
+    mcmtmp = np.empty((lmax+1, lmax+1))
+    for i in range(nspec):
+        wcl = spec[i]*(2*lrange_spec+1)
+        mcm_fortran.calc_coupling_spin0(wcl, lmax+1, lmax+1, lmax+1, mcmtmp.T)
+        mcm_fortran.fill_upper(mcmtmp.T)
+        mcmtmp *= (np.arange(2, lmax+3)*2+1.)/(4*np.pi)
+        res[i, 2:, 2:] = mcmtmp[:-2,:-2]
+    return res
+
     
 def mcm00_ducc_tri(spec, lmax):
     out= np.empty((spec.shape[0],1,((lmax+1)*(lmax+2))//2),dtype=np.float32)
@@ -66,10 +83,15 @@ class Benchmark(object):
         a = time()
         if bin_edges is not None:
             nbins = len(bin_edges)-1
-        if code=='ducc':
+        if code=='ducc' or code=='pspy':
             if spin==0:
-                ducc = mcm00_ducc_tri(self.spec[:,0,:], self.lmax)
-                mcm = tri2full(ducc, self.lmax)[:,0,:,:][0]
+                f = mcm00_pspy if code=='pspy' else mcm00_ducc_tri
+                ducc = f(self.spec[:,0,:], self.lmax)
+                if code=='ducc':
+                    mcm = tri2full(ducc, self.lmax)[:,0,:,:][0]
+                else:
+                    mcm = ducc[:,:,:][0]
+                print(mcm.shape)
             elif spin==2:
                 duccpm = mcmpm_ducc_tri(self.spec, self.lmax)
                 mcmi = tri2full(duccpm, self.lmax)[0]
@@ -86,17 +108,13 @@ class Benchmark(object):
                 elif spin==2:
                     mcm = mcmi[:,2:,2:]
 
-                print(mcm.shape)
         elif code=='wiggle':
             if spin==0:
-                mcm = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='00',bin_edges = bin_edges,bin_weights = bin_weights)
+                mcm = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='TT',
+                                                                     bin_edges = bin_edges,bin_weights = bin_weights,verbose=False)
             elif spin==2:
-                mcm1, g = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='+',bin_edges = bin_edges,bin_weights = bin_weights, return_obj=True)
-                mcm1 = mcm1
-                mcm2 = g.get_coupling_matrix_from_ids('m1','m1',spintype='-',bin_weight_id='b1',beam_id1=None,beam_id2=None)
-                mcm = np.zeros((2,*mcm1.shape))
-                mcm[0] = mcm1
-                mcm[1] = mcm2
+                mcm = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype=['+','-'],
+                                                                 bin_edges = bin_edges,bin_weights = bin_weights,verbose=False)
 
             if bin_edges is None:
                 if spin==0:
@@ -113,27 +131,31 @@ class Benchmark(object):
 
 def test_ducc0_comparison():
 
-    for lmax in [1024,2048,4000]:
+    for lmax in [4096]:
         for binned in [False,True]:
             b = Benchmark(lmax=lmax)
             if binned:
                 bin_edges = np.arange(40,b.lmax,40)
+                print("==============")
                 print(lmax, " binned")
+                print("==============")
                 dtol = 1e-6
             else:
                 bin_edges = None
+                print("==============")
                 print(lmax, " unbinned")
+                print("==============")
                 dtol = 1e-3
 
 
-            for spin in [0,2]:
+            for spin in [0]:#,2]:
                 times = {}
                 mcm_s0s = {}
                 bcode = 'ducc'
-                codes = ['wiggle']
+                codes = ['wiggle','pspy']
                 for code in [bcode,]+codes:
                     mcm_s0s[code], times[code] = b.get_mcm(code,spin=spin,bin_edges = bin_edges)
-                    print(f"{code} time: {(times[code]*1000):.1f} ms")
+                    utils.cprint(f"spin {spin}, {code} time: {(times[code]*1000):.1f} ms",color='g')
                     if code!=bcode:
                         l2 = ducc0.misc.l2error(mcm_s0s[code],mcm_s0s[bcode])
                         print(f"L2 error between {code} and {bcode} solutions: {l2}")

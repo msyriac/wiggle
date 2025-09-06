@@ -13,14 +13,44 @@ from matplotlib.ticker import LogLocator, NullFormatter, ScalarFormatter
 from orphics import io, stats, maps
 import utils
 
+# snside = '' 
+# nside = 2048
+
+# s = stats.Statistics.load_reduced(f'stats{snside}.npz')
+
+# bth = io.load_dict(f'bth{snside}.h5')
+# bth_pure = io.load_dict(f'bth_pure{snside}.h5')
+# theory = io.load_dict(f'theory{snside}.h5')
+# bin_edges = np.loadtxt(f'bin_edges{snside}.txt')
+
+# utils.analyze(s,bth,bth_pure,theory,bin_edges,nside,do_pure=False)
+
+# snside = '_256' 
+# nside = 256
+
+# s = stats.Statistics.load_reduced(f'stats{snside}.npz')
+
+# bth = io.load_dict(f'bth{snside}.h5')
+# bth_pure = io.load_dict(f'bth_pure{snside}.h5')
+# theory = io.load_dict(f'theory{snside}.h5')
+# bin_edges = np.loadtxt(f'bin_edges{snside}.txt')
+
+# utils.analyze(s,bth,bth_pure,theory,bin_edges,nside,do_pure=True)
 
 
-s = stats.Statistics.load_reduced('stats.npz')
 
-bth = io.load_dict('bth.h5')
-bth_pure = io.load_dict('bth_pure.h5')
-theory = io.load_dict('theory.h5')
-bin_edges = np.loadtxt('bin_edges.txt')
+snside = '_512' 
+nside = 512
 
-utils.analyze(s,bth,bth_pure,theory,bin_edges)
+s = stats.Statistics.load_reduced(f'stats{snside}.npz')
+
+bth = io.load_dict(f'bth{snside}.h5')
+bth_pure = io.load_dict(f'bth_pure{snside}.h5')
+theory = io.load_dict(f'theory{snside}.h5')
+bin_edges = np.loadtxt(f'bin_edges{snside}.txt')
+
+utils.analyze(s,bth,bth_pure,theory,bin_edges,nside,do_pure=True)
+
+
+
 print("Done.")

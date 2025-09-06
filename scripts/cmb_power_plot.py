@@ -14,7 +14,7 @@ from orphics import io, stats, mpi, maps
 import utils
 
 
-nside = 2048
+nside = 512
 lmax = 2*nside
 tlmax = 3*nside
 
@@ -31,10 +31,10 @@ bin_edges = np.append(np.append(np.geomspace(2,200,10),np.arange(240,2400,60)),n
 bin_edges = bin_edges[bin_edges<lmax]
 
 
-nsims = 480
+nsims = 240
 comm,rank,my_tasks = mpi.distribute(nsims)
 
-bshow = lambda x: bench.show(x) if rank==0 else io.no_context()
+bshow = lambda x: (bench.show(x) if rank==0 else io.no_context())
 
 with bshow("camb"):
     ps = wutils.get_camb_spectra(lmax=tlmax)
@@ -53,11 +53,11 @@ s = stats.Statistics(comm)
 
 for i,task in enumerate(my_tasks):
     print(f"Rank {rank} doing {i+1}/{len(my_tasks)}, task number {task}.")
-    with bench.show("sim"):
+    with bshow("sim"):
         alm = cs.rand_alm(ps, lmax=tlmax, seed=task)
         imap = cs.alm2map(alm, enmap.empty((3,)+shape, wcs,dtype=np.float32))
     if i==0:
-        with bench.show("mask"):
+        with bshow("mask"):
             try:
                 mask = enmap.read_map(f'mask_{nside}.fits')
                 mask_alm = hp.read_alm(f'mask_alm_{nside}.fits')
@@ -69,24 +69,24 @@ for i,task in enumerate(my_tasks):
                     enmap.write_map(f'mask_{nside}.fits',mask)
                     hp.write_alm(f'mask_alm_{nside}.fits',mask_alm,overwrite=True)
                 
-        with bench.show("purify init"):
+        with bshow("purify init"):
             ebp = pywiggle.EBPurifier(mask,lmax)
 
     omap = imap * mask
-    with bench.show("map2alm"):
+    with bshow("map2alm"):
         oalms = cs.map2alm(omap,lmax=lmax,spin=[0,2])
 
     if i==0 and lmax<512 and rank==0:
         for j in range(3): wutils.hplot(imap[j],f'imap_{j}',grid=True,ticks=20)
         wutils.hplot(mask,f'mask',grid=True,ticks=20)
 
-    with bench.show("purify"):
+    with bshow("purify"):
         # Purify B
         _, pureB = ebp.project(omap[1], omap[2],masked_on_input=True)
 
 
     # Get impure power
-    with bench.show("wiggle"):
+    with bshow("wiggle"):
         ret = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
     bcls = unpack_cls(ret)
     for spec in ['TT','EE','TE','BB','EB','TB']:
@@ -97,21 +97,24 @@ for i,task in enumerate(my_tasks):
 
     # Get pure power
     oalms[2] = pureB.copy()
-    with bench.show("wiggle"):
+    with bshow("wiggle"):
         ret_pure = pywiggle.get_powers(oalms,oalms, mask_alm,return_theory_filter=True,lmax=lmax,bin_edges=bin_edges,pure_B=True)
     bcls_pure = unpack_cls(ret_pure)
     s.add('BB pure',bcls_pure['BB'])
+    s.add('TB pure',bcls_pure['TB'])
+    s.add('EB pure',bcls_pure['EB'])
     if i==0:
         bth_pure = pywiggle.get_binned_theory(ret_pure,theory)
 
 s.allreduce()
-s.save_reduced('stats.npz')
+s.save_reduced(f'stats_{nside}.npz')
 
 if rank==0:
-    io.save_dict('bth.h5',bth)
-    io.save_dict('bth_pure.h5',bth_pure)
-    io.save_dict('theory.h5',theory)
-    np.savetxt('bin_edges.txt',bin_edges)
-    utils.analyze(s,bth,bth_pure,theory,bin_edges)
+    io.save_dict(f'bth_{nside}.h5',bth)
+    io.save_dict(f'bth_pure_{nside}.h5',bth_pure)
+    io.save_dict(f'theory_{nside}.h5',theory)
+    np.savetxt(f'bin_edges_{nside}.txt',bin_edges)
+    utils.analyze(s,bth,bth_pure,theory,bin_edges,nside,do_pure=True)
+    utils.analyze(s,bth,bth_pure,theory,bin_edges,nside,do_pure=False)
 
     print("Done.")

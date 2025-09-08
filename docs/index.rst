@@ -3,6 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+====================
 wiggle documentation
 ====================
 			 
@@ -12,11 +13,6 @@ wiggle documentation
 
 Welcome to the documentation for ``wiggle``,  a tool for fast unbiased angular power spectrum estimation of spin-0 and spin-2 fields on the sphere, most commonly encountered in the context of cosmological data analysis.
 
-.. warning::
-
-   ``wiggle`` has only been tested for spin-0 (scalar) spectra so far. The spin-2 functionality is under active development.
-
-
 
 .. toctree::
    :maxdepth: 2
@@ -24,3 +20,4 @@ Welcome to the documentation for ``wiggle``,  a tool for fast unbiased angular p
 
    readme
    reference
+   

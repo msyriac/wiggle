@@ -1,3 +1,4 @@
+======
 wiggle
 ======
 
@@ -12,7 +13,6 @@ wiggle
    :alt: PyPI version
 
 \
-\
 
 .. image:: https://raw.githubusercontent.com/msyriac/wiggle/main/docs/wiggle_logo.png
    :width: 150
@@ -21,16 +21,13 @@ wiggle
 ``wiggle`` stands for the WIGner Gauss-Legendre Estimator. This Python package provides a fast implementation of unbiased angular power spectrum estimation of spin-0 and spin-2 fields on the sphere, most commonly encountered in the context of cosmological data analysis. With an efficient and exact algorithm, this code performs mode-decoupling very fast; in the case of binned spectra, ``wiggle`` can be orders of magnitude faster than other approaches (often around one second of compute-time at most).
 
 
-⚠️  **Warning**: ``wiggle`` is under active development! Its API will likely change.
-
-
 * Free software: BSD license
 * Documentation: https://wiggle.readthedocs.io.
 
 
   
 Installing
-----------
+==========
 
 Make sure your ``pip`` tool is up-to-date. To install ``wiggle``, run:
 
@@ -47,7 +44,7 @@ This will install a pre-compiled binary suitable for your system (only Linux and
 If you require more control over your installation, e.g. using Intel compilers, please see the section below on compiling from source.
 
 Compiling from source (advanced / development workflow)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------------------------------------
 
 The easiest way to install from source is to use the ``pip`` tool,
 with the ``--no-binary`` flag. This will download the source distribution
@@ -83,7 +80,7 @@ After installation, make sure to run a test with:
    $ pytest
 
 Quick Usage
------------
+===========
 
 Accurate power spectrum estimation requires you to first convert a pixelated and masked map to its spherical harmonic coefficients. ``wiggle`` does not provide tools for SHTs and expects you to have the ``alm`` coefficients both for the masked fields and the mask itself already in hand.  These can be obtained using a code like ``healpy`` in the case of HEALPix maps or a code like ``pixell`` in the case of rectangular pixelization maps.
 
@@ -122,8 +119,8 @@ Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a
 		> chisquare = get_chisquare(dcls,th_filt @ theory_cls,cinv)
 
 
-Contributions
--------------
+Contributing
+============
 
 If you have write access to this repository, please:
 

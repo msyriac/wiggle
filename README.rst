@@ -23,7 +23,7 @@ wiggle
 \
 
 .. image:: https://raw.githubusercontent.com/msyriac/wiggle/main/docs/plot_8192_0.png
-   :width: 450
+   :width: 650
    :alt: Wiggle logo
 
 
@@ -97,33 +97,25 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 		
 		> import pywiggle
 		> import numpy as np
+		> import healpy as hp # or use pixell for rectangular pixel maps
 
-		> lmax = 4000
+		> lmax = 4000 # Max multipole out to which you want reliable answers
 		> bin_edges = np.arange(40,lmax,40) # Choose bin edges
-
-		# Initialize wiggle
-		> w = Wiggle(lmax, bin_edges=bin_edges)
-		# Register the SHT of a mask and identify it with a key
-		> w.add_mask('mt1', mask_alm_t1)
-		# Register another mask
-		> w.add_mask('mt2', mask_alm_p2)
-		# Register a beam to deconvolve from both fields
-		> w.add_beam('b1', beam_fl)
-		# Get the decoupled cross-Cls from the masked field SHTs
-		> ret = w.get_powers(alm_t1, alm_t2, 'mt1', 'mt2',
-		                          return_theory_filter=False,
-		     			  beam_id1='b1', beam_id2='b1')
-		> ret_TT = ret['TT']
+		> alms1 = hp.map2alm(map1 * mask, lmax=lmax) # or get these from your favorite way of getting an SHT of masked maps
+		> alms2 = hp.map2alm(map2 * mask, lmax=lmax) # same as above
+		> mask_alm = hp.map2alm(map2 * mask, lmax=2*lmax)  # Notice that mask alms are needed out to 2*lmax
+		> ret = pywiggle.get_powers(alms1,alms2, mask_alm1, return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
+		> bcls = ret['TT']['Cls'] # The binned theory Cls for spin-0
+		> th_filt = ret['TT']['Th'] # Optional binning matrix for precision theory comparisons
 
 The interface to ``get_powers`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields. If the input spherical harmonics are `(1,nalm)` or `(nalm,)` dimensional, where `nalm` is the number of spherical harmonic `a_lm` elements, the field is assumed to be spin-0 and only the `TT`-like spectrum is returned in the dictionary. If the input spherical harmonics are `(2,nalm)` dimensional, then the inputs are assumed to be E/B decompositions of a spin-2 field, and EE, EB, BE and BB are returned. If the input spherical harmonics are `(3,nalm)` dimensional, then the inputs are assumed to be a scalar field along with E/B decompositions of a spin-2 field, and TT, TE, ET, EE, EB, BE and BB are returned.
 
-
-Here ``dcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a matrix that can be dotted with a theory spectrum to obtain the binned theory to compare the power spectrum to (e.g. for inference):
+Here ``bcls`` is the mode-decoupled unbiased power spectrum and ``th_filt`` is a matrix that can be dotted with a theory spectrum to obtain the binned theory to compare the power spectrum to (e.g. for inference):
     
 		
 .. code-block:: python
 		
-		> chisquare = get_chisquare(dcls,th_filt @ theory_cls,cinv)
+		> chisquare = get_chisquare(bcls,th_filt @ theory_cls,cinv)
 
 
 Contributing

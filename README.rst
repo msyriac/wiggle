@@ -105,7 +105,7 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 		> alms2 = hp.map2alm(map2 * mask, lmax=lmax) # same as above
 		> mask_alm = hp.map2alm(map2 * mask, lmax=2*lmax)  # Notice that mask alms are needed out to 2*lmax
 		> ret = pywiggle.get_powers(alms1,alms2, mask_alm1, return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
-		> bcls = ret['TT']['Cls'] # The binned theory Cls for spin-0
+		> bcls = ret['TT']['Cls'] # The debiased power spectrum for spin-0
 		> th_filt = ret['TT']['Th'] # Optional binning matrix for precision theory comparisons
 
 The interface to ``get_powers`` is flexible enough to allow all auto- and cross- spectra of spin-0 and spin-2 fields. If the input spherical harmonics are `(1,nalm)` or `(nalm,)` dimensional, where `nalm` is the number of spherical harmonic `a_lm` elements, the field is assumed to be spin-0 and only the `TT`-like spectrum is returned in the dictionary. If the input spherical harmonics are `(2,nalm)` dimensional, then the inputs are assumed to be E/B decompositions of a spin-2 field, and EE, EB, BE and BB are returned. If the input spherical harmonics are `(3,nalm)` dimensional, then the inputs are assumed to be a scalar field along with E/B decompositions of a spin-2 field, and TT, TE, ET, EE, EB, BE and BB are returned.

@@ -966,11 +966,8 @@ def get_pure_EB_alms(Qmap, Umap, mask, masked_on_input=False,
                      return_mask=False, lmax=None, eps=1e-4):
     """
     Perform pure E/B mode decomposition on a masked polarization map.
-
-    This is a thin wrapper that preserves the original API by instantiating
-    a precomputing projector class under the hood. Expensive, mask-dependent
-    quantities (mask spin-derivatives and related harmonic factors) are
-    constructed once during class initialization.
+    Based on code from Irene Abril-Cabezas and Will Coulton.
+    
 
     Parameters
     ----------
@@ -1182,7 +1179,6 @@ class EBPurifier(object):
         pureB = self.ainfo.lmul(pureB, self.kill_md)
 
         return pureE, pureB
-
 
 
 

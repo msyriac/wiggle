@@ -417,7 +417,7 @@ def _prepare_bins(bin_edges,bin_weights,lmax,bin_weights2=None):
 def _parity_flip(c,parity):
     c = c.copy()
     if parity=='-':
-        c[1::2] *= -1  # This is (-1)^ell
+        c[...,1::2] *= -1  # This is (-1)^ell
     elif parity=='+':
         pass
     else:
@@ -571,10 +571,10 @@ class Benchmark(object):
         elif code=='wiggle':
             if spin==0:
                 mcm = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype='TT',
-                                                                     bin_edges = bin_edges,bin_weights = bin_weights,verbose=False)
+                                                                     bin_edges = bin_edges,bin_weights = bin_weights,verbose=False)[0,0,...]
             elif spin==2:
                 mcm = pywiggle.get_coupling_matrix_from_mask_cls(self.spec[0,0],self.lmax,spintype=['+','-'],
-                                                                 bin_edges = bin_edges,bin_weights = bin_weights,verbose=False)
+                                                                 bin_edges = bin_edges,bin_weights = bin_weights,verbose=False)[0,:,...]
 
             if bin_edges is None:
                 if spin==0:

@@ -103,7 +103,7 @@ If you are interested in accurate power spectra out to some maximum multipole ``
 		> bin_edges = np.arange(40,lmax,40) # Choose bin edges
 		> alms1 = hp.map2alm(map1 * mask, lmax=lmax) # or get these from your favorite way of getting an SHT of masked maps
 		> alms2 = hp.map2alm(map2 * mask, lmax=lmax) # same as above
-		> mask_alm = hp.map2alm(map2 * mask, lmax=2*lmax)  # Notice that mask alms are needed out to 2*lmax
+		> mask_alm = hp.map2alm(mask, lmax=2*lmax)  # Notice that mask alms are needed out to 2*lmax
 		> ret = pywiggle.get_powers(alms1,alms2, mask_alm1, return_theory_filter=True,lmax=lmax,bin_edges=bin_edges)
 		> bcls = ret['TT']['Cls'] # The debiased power spectrum for spin-0
 		> th_filt = ret['TT']['Th'] # Optional binning matrix for precision theory comparisons

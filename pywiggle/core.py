@@ -305,16 +305,28 @@ class Wiggle(object):
         return self._Mmatrix(spintype,f,pure_E,pure_B)
 
     def _Mmatrix(self,spintype,f,pure_E,pure_B):
+        # Memoize the expensive dense contraction f. The '22' assembly below
+        # requests the same (spin1,spin2,parity,gfact) contraction up to four
+        # times (Mp_EE, Mp_BB, Mp_EB and Mm_EB all need f(2,2,'+') and
+        # f(2,2,'-') in the non-pure case), so cache each unique call. The
+        # cache is local to this invocation.
+        cache = {}
+        def fc(spin1,spin2,parity,gfact):
+            key = (spin1,spin2,parity,gfact)
+            if key not in cache:
+                cache[key] = f(spin1,spin2,parity,gfact)
+            return cache[key]
+
         def Mp(npure):
             if npure==0:
-                g1 = f(2,2,'+',None)
-                g2 = f(2,2,'-',None)
+                g1 = fc(2,2,'+',None)
+                g2 = fc(2,2,'-',None)
             elif npure==1:
-                g1 = f(2,0,'+',1)
-                g2 = f(2,0,'-',1)
+                g1 = fc(2,0,'+',1)
+                g2 = fc(2,0,'-',1)
             elif npure==2:
-                g1 = f(0,0,'+',2)
-                g2 = f(0,0,'-',2)                
+                g1 = fc(0,0,'+',2)
+                g2 = fc(0,0,'-',2)
             return (g1+g2)/2.
 
         if spintype=='TT':
@@ -344,12 +356,14 @@ class Wiggle(object):
             if pure_E and pure_B:
                 Mm_EB = zero # TODO: confirm this identity
             else:
+                # These contractions were already computed inside Mp above,
+                # so the memoized fc returns them at no extra cost.
                 if any([pure_E,pure_B]):
-                    g1 = f(2,0,'+',1)
-                    g2 = f(2,0,'-',1)
+                    g1 = fc(2,0,'+',1)
+                    g2 = fc(2,0,'-',1)
                 else:
-                    g1 = f(2,2,'+',None)
-                    g2 = f(2,2,'-',None)
+                    g1 = fc(2,2,'+',None)
+                    g2 = fc(2,2,'-',None)
                 Mm_EB = (g1-g2)/2.
 
                 

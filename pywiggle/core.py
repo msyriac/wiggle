@@ -1382,11 +1382,11 @@ def get_powers(alms1,alms2, mask_alm1, mask_alm2=None,
         if mask_alm1.shape!=mask_alm2.shape: raise ValueError
         if mask_alm2.shape[0]==1:
             w.add_mask('m2', mask_alm2[0])
-            m2d = 'm2'
+            m2id = 'm2'
         else:
             w.add_mask('m2t', mask_alm2[0])
             w.add_mask('m2p', mask_alm2[1])
-            m2d = ['m2t','m2p']
+            m2id = ['m2t','m2p']
     else:
         m2id = m1id
         

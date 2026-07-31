@@ -79,7 +79,13 @@ class Wiggle(object):
         self.lmax = lmax
         self.Nlmax = (xgllmax*lmax+1) # GL number of weights
         self.ells = np.arange(xlmax*lmax+1)
-        self.mu, self.w_mu = fastgl.roots_legendre(self.Nlmax) 
+        self.mu, self.w_mu = fastgl.roots_legendre(self.Nlmax)
+        # GL nodes come in +/- pairs, mu_i = -mu_{N-1-i}; the parity-halved
+        # unbinned contraction in _m_parity_halved relies on this symmetry.
+        # nh is the size of the half grid (the first nh nodes), which includes
+        # the self-mirrored mu=0 middle node when Nlmax is odd.
+        self.nh = (self.Nlmax + 1) // 2
+        assert np.allclose(self.mu, -self.mu[::-1]), "GL grid is not reflection-symmetric"
         # This is d00 = P_ell evaluated on 2lmax x 2lmax
         # It always needs to be computed since it is needed for correlation
         # functions, so might as well do it now. It has to be unbinned.
@@ -139,16 +145,13 @@ class Wiggle(object):
             ws[ls>=2] = ws[ls>=2] * (mul[ls>=2])**pfact
         return ws
 
-    def _get_b1_b2(self,spin1,spin2,parity,bin_weight_id,
-                   beam_id1,beam_id2,gfact=None):
-        # Get the left (ell) and right (ell') sides of the G-matrices
-        
+    def _get_weights12(self,parity,bin_weight_id,beam_id1,beam_id2,gfact=None):
+        # Column weights for the ell (left) and ell' (right) sides of the G-matrices
+
         # these are weights that multiply the ell side of the G matrix
         # it includes a parity term as well as bandpower bin weights
-
         nweights = self._get_G_term_weights(mode_count_weight=False,parity=parity,apply_bin_weights=True,bin_weight_id=bin_weight_id,
                                             pfact=(-gfact) if (gfact is not None) else None)
-
 
         # these are weights that multiply the ell' side of the G matrix
         # it includes a parity term and a mode counting term but no bin weights
@@ -159,6 +162,12 @@ class Wiggle(object):
             nweights2 = nweights2 * self._beam_fl[beam_id1]
         if beam_id2 is not None:
             nweights2 = nweights2 * self._beam_fl[beam_id2]
+        return nweights,nweights2
+
+    def _get_b1_b2(self,spin1,spin2,parity,bin_weight_id,
+                   beam_id1,beam_id2,gfact=None):
+        # Get the left (ell) and right (ell') sides of the G-matrices
+        nweights,nweights2 = self._get_weights12(parity,bin_weight_id,beam_id1,beam_id2,gfact=gfact)
 
         if self._binned:
             # we efficiently calculate the binned ell and ell' sides by binning the weights times Wigner-ds
@@ -177,9 +186,91 @@ class Wiggle(object):
                 
         return b1,b2
 
-    def _get_wigner(self,spin1,spin2):
-        return _wiggle._compute_wigner_d_matrix(self.lmax,spin1,spin2,self.mu)
-        
+    def _get_wigner(self,spin1,spin2,half=False):
+        # half=True evaluates on the first nh nodes only (used by the
+        # parity-halved unbinned contraction)
+        mu = self.mu[:self.nh] if half else self.mu
+        return _wiggle._compute_wigner_d_matrix(self.lmax,spin1,spin2,mu)
+
+    def _contract(self,W,b1,b2):
+        # The expensive dense contraction M[...,j,k] = sum_i b1[i,j] W[...,i] b2[i,k]
+        D = np.einsum('...i,ik->...ik', W, b2, optimize='greedy')  # (..., N, nell2)
+        return np.einsum('ij,...ik->...jk', b1, D, optimize='greedy') # (..., nell1, nell2)
+
+    def _m_parity_halved(self,W,spin1,spin2,parity,bin_weight_id,beam_id1,beam_id2,gfact):
+        """
+        Unbinned G-matrix contraction using only the first nh ~ N/2
+        Gauss-Legendre nodes, exploiting the reflection symmetry
+        mu_i = -mu_{N-1-i} of the quadrature grid.
+
+        For d00 and d20, d(-mu) = (-1)^ell d(mu), so folding the quadrature
+        sum onto the half grid turns the full contraction into four half-size
+        ones over the even/odd-ell column blocks (a ~2x flop saving):
+        the (even,even)/(odd,odd) output blocks use W+ = W(mu) + W(-mu) and
+        the (even,odd)/(odd,even) blocks use W- = W(mu) - W(-mu).
+
+        For d22, reflection maps onto the partner kernel,
+        d22(-mu) = (-1)^ell d2,-2(mu), so the fold instead gives
+        M = X + C o Y with C_jk = (-1)^(j+k), where X is the half-grid d22
+        contraction against W(mu) and Y the half-grid d2,-2 contraction
+        against W(-mu). This is flop-neutral (two half-size products replace
+        one full-size one) but only ever builds half-size Wigner-d matrices.
+
+        The mu=0 middle node (N odd) is its own mirror image: it is kept once
+        in W+/X and dropped from W-/Y.
+
+        Parameters
+        ----------
+        W : ndarray, (N,) or (nmask, N)
+            Quadrature-weighted mask correlation function w_mu * xi.
+        spin1, spin2 : int
+            Spins of the two fields; (0,0), (2,0) or (2,2).
+        parity, bin_weight_id, beam_id1, beam_id2, gfact
+            Passed through to the column-weight construction; see _get_m.
+
+        Returns
+        -------
+        M : ndarray, (..., lmax+1, lmax+1)
+            The same matrix as the full-grid contraction b1^T diag(W) b2.
+        """
+        nh = self.nh
+        # Fold W onto the half grid: values at +mu_i and at -mu_i
+        Wh = W[..., :nh].copy()               # W(mu_i)
+        Whr = W[..., ::-1][..., :nh].copy()   # W(-mu_i)
+        if self.Nlmax % 2 == 1:
+            Whr[..., -1] = 0.  # middle node counted once (it lives in Wh)
+
+        # Column weights (ell and ell' sides), identical to the full-grid path
+        nw1,nw2 = self._get_weights12(parity,bin_weight_id,beam_id1,beam_id2,gfact=gfact)
+
+        if (spin1,spin2)==(2,2):
+            d22 = self._get_wigner(2,2,half=True)
+            d2m2 = self._get_wigner(2,-2,half=True)
+            X = self._contract(Wh, nw1[None,:]*d22, nw2[None,:]*d22)
+            Y = self._contract(Whr, nw1[None,:]*d2m2, nw2[None,:]*d2m2)
+            sgn = (-1.)**self.ells[:self.lmax+1]
+            return X + sgn[:,None]*sgn[None,:]*Y   # C o Y with C_jk = (-1)^(j+k)
+        else:
+            dh = self.ud00[:nh] if (spin1,spin2)==(0,0) else self._get_wigner(2,0,half=True)
+            Wp = Wh + Whr
+            Wm = Wh - Whr
+            if self.Nlmax % 2 == 1:
+                # Odd-ell columns vanish exactly at mu=0, so the middle node
+                # cannot contribute to the mixed-parity blocks; enforce that.
+                Wm[..., -1] = 0.
+            # Even/odd-ell column blocks of the half-grid b1, b2 (multiplying
+            # the strided views by the weights yields fresh contiguous arrays)
+            b1e = nw1[None,::2]*dh[:,::2]
+            b1o = nw1[None,1::2]*dh[:,1::2]
+            b2e = nw2[None,::2]*dh[:,::2]
+            b2o = nw2[None,1::2]*dh[:,1::2]
+            M = np.zeros((*W.shape[:-1], self.lmax+1, self.lmax+1))
+            M[..., ::2, ::2] = self._contract(Wp,b1e,b2e)
+            M[..., 1::2, 1::2] = self._contract(Wp,b1o,b2o)
+            M[..., ::2, 1::2] = self._contract(Wm,b1e,b2o)
+            M[..., 1::2, ::2] = self._contract(Wm,b1o,b2e)
+            return M
+
     def _get_m(self,mask_cls,spin1,spin2,parity,bin_weight_id,
                beam_id1,beam_id2,gfact=None):
 
@@ -199,11 +290,14 @@ class Wiggle(object):
         W = self.w_mu * xi
         
 
-        # Get the left (ell) and right (ell') sides of the G-matrices
-        b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
-
-        D = np.einsum('...i,ik->...ik', W, b2, optimize='greedy')  # (..., N, lmax)
-        M = np.einsum('ij,...ik->...jk', b1, D, optimize='greedy') # (..., lmax, lmax)
+        if self._binned:
+            # Get the (binned) left (ell) and right (ell') sides of the G-matrices
+            b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
+            M = self._contract(W,b1,b2)
+        else:
+            # Unbinned case: fold the contraction onto half the GL grid using
+            # the reflection symmetry of the nodes (see _m_parity_halved)
+            M = self._m_parity_halved(W,spin1,spin2,parity,bin_weight_id,beam_id1,beam_id2,gfact)
 
         if ret_singlet:
             if M.shape[0]!=1: raise ValueError

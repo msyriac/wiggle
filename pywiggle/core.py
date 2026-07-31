@@ -1392,7 +1392,7 @@ def get_powers(alms1,alms2, mask_alm1, mask_alm2=None,
                lmax=None,bin_edges=None,
                verbose=False,
                xlmax=2,xgllmax=2):
-    """
+    r"""
     Compute decoupled angular power spectra (:math:`C_{\ell}`) from the spherical harmonics
     of maps that have already been masked.
 

@@ -467,16 +467,6 @@ def _get_mcm_standalone(spin1, spin2, cl_mask, lmax,
 
 # Copied many of the following from mreinecke/ducc0
 
-def _tri2full(tri, lmax):
-    res = np.zeros((tri.shape[0], tri.shape[1], lmax+1, lmax+1))
-    lfac = 2.*np.arange(lmax+1) + 1.
-    for l1 in range(lmax+1):
-        startidx = l1*(lmax+1) - (l1*(l1+1))//2
-        res[:,:,l1,l1:] = lfac[l1:] * tri[:,:, startidx+l1:startidx+lmax+1]
-        res[:,:,l1:,l1] = (2*l1+1) * tri[:,:, startidx+l1:startidx+lmax+1]
-    return res
-
-
 def _mcm00_nmt(spec,lmax):
     mcm = _get_mcm_standalone(spin1=0, spin2=0, cl_mask=spec[0], lmax=lmax)[:,0,:,0][None,...]
     return mcm
@@ -495,24 +485,55 @@ def _mcm00_pspy(spec, lmax):
     return res
 
     
-def _mcm00_ducc_tri(spec, lmax,nthreads):
-    out= np.empty((spec.shape[0],1,((lmax+1)*(lmax+2))//2),dtype=np.float32)
-    ducc0.misc.experimental.coupling_matrix_spin0and2_tri(spec.reshape((spec.shape[0],1,spec.shape[1])), lmax, (0,0,0,0), (0,-1,-1,-1,-1), nthreads=nthreads, res=out)
-    return out
+def _mcm00_ducc(spec, lmax, nthreads):
+    """Spin-0 (00) mode-coupling matrices for a batch of mask spectra using
+    ducc0's coupling_matrix_rect (the current interface; the older
+    coupling_matrix_spin0and2_tri was removed from ducc0).
 
-def _mcm02_ducc_tri(spec, lmax,nthreads):
-    out= np.empty((spec.shape[0],5,((lmax+1)*(lmax+2))//2),dtype=np.float32)
-    ducc0.misc.experimental.coupling_matrix_spin0and2_tri(spec[:,:,:], lmax, (0,1,2,3), (0,1,2,3,4), nthreads=nthreads, res=out)
-    return out
+    Parameters
+    ----------
+    spec : (nspec, nl) array
+        Mask power spectra; nl should extend to 2*lmax+1 for exactness.
+    lmax : int
+        Maximum multipole of the output matrices.
+    nthreads : int
+        Number of threads for ducc.
 
-def _mcmpm_ducc_tri(spec, lmax,nthreads):
-    out= np.empty((spec.shape[0],2,((lmax+1)*(lmax+2))//2),dtype=np.float32)
-    ducc0.misc.experimental.coupling_matrix_spin0and2_tri(spec[:,3:,:], lmax, (0,0,0,0), (-1,-1,-1,0,1), nthreads=nthreads, res=out)
-    return out
+    Returns
+    -------
+    (nspec, lmax+1, lmax+1) array
+        Coupling matrices in the MASTER convention used by wiggle
+        (ducc applies (2l3+1)/(4pi) internally; the (2l2+1) column
+        factor is applied here).
+    """
+    res = np.empty((spec.shape[0], lmax+1, lmax+1), dtype=np.float64)
+    ducc0.misc.experimental.coupling_matrix_rect(spec, tuple([0]*spec.shape[0]), res=res, nthreads=nthreads)
+    return res * (2.*np.arange(lmax+1) + 1.)
 
-def _mcm02_pure_ducc(spec, lmax,nthreads):
-    res = np.empty((nspec, 4, lmax+1, lmax+1), dtype=np.float32)
-    return ducc0.misc.experimental.coupling_matrix_spin0and2_pure(spec, lmax, nthreads=nthreads, res=res)
+def _mcmpm_ducc(spec, lmax, nthreads):
+    """++ and -- (spin-2) mode-coupling matrix pairs for a batch of 22-type
+    mask spectra using ducc0's coupling_matrix_rect with optype 4, which
+    appends a ++ and a -- matrix per input spectrum.
+
+    Parameters
+    ----------
+    spec : (nspec, nl) array
+        22-type mask power spectra.
+    lmax : int
+        Maximum multipole of the output matrices.
+    nthreads : int
+        Number of threads for ducc.
+
+    Returns
+    -------
+    (nspec, 2, lmax+1, lmax+1) array
+        [i, 0] is the ++ matrix and [i, 1] the -- matrix for spectrum i,
+        in the MASTER convention used by wiggle.
+    """
+    nspec = spec.shape[0]
+    res = np.empty((2*nspec, lmax+1, lmax+1), dtype=np.float64)
+    ducc0.misc.experimental.coupling_matrix_rect(spec, tuple([4]*nspec), res=res, nthreads=nthreads)
+    return (res * (2.*np.arange(lmax+1) + 1.)).reshape(nspec, 2, lmax+1, lmax+1)
 
 # Modified version of ducc0 mcm_bench.py
 class Benchmark(object):
@@ -545,16 +566,12 @@ class Benchmark(object):
                 elif code=='nmt':
                     f = _mcm00_nmt
                 elif code=='ducc':
-                    f = lambda x, y: _mcm00_ducc_tri(x,y,nthreads=self.nthreads)
-                ducc = f(self.spec[:,0,:], self.lmax)
-                if code=='ducc':
-                    mcm = _tri2full(ducc, self.lmax)[:,0,:,:][0]
-                else:
-                    mcm = ducc[:,:,:][0]
+                    f = lambda x, y: _mcm00_ducc(x,y,nthreads=self.nthreads)
+                mcm = f(self.spec[:,0,:], self.lmax)[0]
             elif spin==2:
                 if code!='ducc': raise ValueError
-                duccpm = _mcmpm_ducc_tri(self.spec, self.lmax,nthreads=self.nthreads)
-                mcmi = _tri2full(duccpm, self.lmax)[0]
+                # row 3 of self.spec is the 22-type mask spectrum
+                mcmi = _mcmpm_ducc(self.spec[:,3,:], self.lmax,nthreads=self.nthreads)[0]
             if bin_edges is not None:
                 if spin==0:
                     mcm = bin_square_matrix(mcm,bin_edges,self.lmax,bin_weights=bin_weights)

@@ -36,3 +36,8 @@ Homepage = "https://github.com/msyriac/wiggle"
 
 [tool.setuptools.package-data]
 pywiggle = ["data/*.npz"]
+
+[tool.pytest.ini_options]
+# Only collect the actual test suite; scripts/test_*.py are benchmark
+# scripts with CLI entry points, not pytest tests.
+testpaths = ["pywiggle/tests"]

@@ -56,8 +56,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13   # Intel → x86_64 wheel
-            cibw_arch: x86_64
           - os: macos-14   # Apple-Silicon → arm64 wheel
             cibw_arch: arm64
 

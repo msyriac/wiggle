@@ -105,3 +105,48 @@ def test_power():
     assert np.allclose(acl_TT[:LMAX + 1], btheory_TT, rtol=1e-1, atol=0)
 
 
+def test_integer_spintype():
+    """An integer spintype m requests the spin-m x spin-0 coupling.
+
+    m=0 and m=2 must reproduce 'TT' and 'TE' exactly, higher m must build
+    invertible binned matrices whose theory filter inverts consistently, and
+    bad spintypes must still be rejected.
+    """
+    np.random.seed(11)
+    mask = galactic_strip_mask(NSIDE, 20)
+    mask = hp.smoothing(mask, fwhm=np.radians(1.5))
+    mask_alm = hp.map2alm(mask, lmax=2 * LMAX)
+
+    w = pywiggle.Wiggle(LMAX, bin_edges=np.arange(40, LMAX, 40))
+    w.add_mask('m', mask_alm)
+
+    # integer spins that overlap the existing string spintypes must be identical
+    for m, spintype in [(0, 'TT'), (2, 'TE')]:
+        assert np.array_equal(w.get_coupling_matrix_from_ids('m', 'm', m),
+                              w.get_coupling_matrix_from_ids('m', 'm', spintype))
+        assert np.array_equal(w.get_theory_filter('m', 'm', spintype=m),
+                              w.get_theory_filter('m', 'm', spintype=spintype))
+
+    ells = np.arange(LMAX + 1)
+    alm = hp.synalm(1e-3 * (ells + 10.)**-2., lmax=LMAX)
+    pcl = pywiggle.alm2cl(alm, alm)
+    assert np.allclose(w.decoupled_cl(pcl, 'm', spintype=0)['Cls'],
+                       w.get_powers(alm, alm, 'm')['TT']['Cls'], rtol=1e-12, atol=0)
+    assert np.allclose(w.decoupled_cl(pcl, 'm', spintype=2)['Cls'],
+                       w.decoupled_cl(pcl, 'm', spintype='TE')['Cls'], rtol=1e-12, atol=0)
+
+    # a smooth theory spectrum must survive couple-then-decouple at every m
+    cl = 1e-3 * (ells + 10.)**-2.
+    for m in range(5):
+        mcm = w.get_coupling_matrix_from_ids('m', 'm', m)
+        assert np.isfinite(np.linalg.cond(mcm))
+        btheory = w.get_theory_filter('m', 'm', spintype=m) @ cl
+        assert np.allclose(np.linalg.solve(mcm, mcm @ btheory), btheory,
+                           rtol=1e-8, atol=0)
+
+    with pytest.raises(ValueError):
+        w.get_coupling_matrix_from_ids('m', 'm', -1)
+    with pytest.raises(ValueError):
+        w.get_coupling_matrix_from_ids('m', 'm', 'XY')
+    with pytest.raises(ValueError):
+        w.get_coupling_matrix_from_ids('m', 'm', 3, pure_E=True)

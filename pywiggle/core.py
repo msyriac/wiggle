@@ -14,6 +14,26 @@ import os
 _reserved_bin_id = '__unity'
 
 
+def _is_spin(spintype):
+    """Whether a spintype argument is an integer spin m, meaning a (spin-m x spin-0) cross.
+
+    Anywhere a spintype string like 'TT' or 'TE' is accepted, an integer m may
+    be passed instead to request the coupling between a spin-0 field and a
+    spin-m one. m=0 and m=2 are equivalent to 'TT' and 'TE' respectively.
+
+    Parameters
+    ----------
+    spintype : str or int
+        The spintype argument to inspect.
+
+    Returns
+    -------
+    bool
+        True if spintype is a non-negative integer spin.
+    """
+    return isinstance(spintype,(int,np.integer)) and not isinstance(spintype,bool) and spintype>=0
+
+
 """
 =========
 Core classes and functions
@@ -166,11 +186,7 @@ class Wiggle(object):
                                                             self.nbins,self._bin_indices,nweights,nweights2)
         else:
             # in the unbinned case we simply multiply the weights and wigner-ds
-            if (spin1==0) and (spin2==0): ud = self.ud00
-            if (spin1==2) and (spin2==2):
-                ud = self._get_wigner(2,2)
-            if (spin1==2) and (spin2==0):
-                ud = self._get_wigner(2,0)
+            ud = self.ud00 if (spin1==0 and spin2==0) else self._get_wigner(spin1,spin2)
 
             b1 = nweights[None,:] * ud
             b2 = nweights2[None,:] * ud
@@ -191,8 +207,11 @@ class Wiggle(object):
         
         # Get the core of the mode-coupling G matrices. This is where the expensive
         # dot product happens.
+        # Any (spin,0) combination is supported, as well as (2,2). The (s,0)
+        # matrices are needed for azimuthal multipole stacking, where the spin
+        # sits on a catalog of positions rather than on the data.
         # Know of situations where other spins would be useful? Write to us!
-        if [spin1,spin2] not in [[0,0],[2,2],[2,0]]: raise NotImplementedError
+        if spin2 != 0 and [spin1,spin2] != [2,2]: raise NotImplementedError
 
         # Get the Gauss-Legendre quadrature weighted correlation functions of the mask
         xi = self._get_corr(mask_cls,parity=parity)
@@ -228,12 +247,17 @@ class Wiggle(object):
             Identifier for the first mask to use in the coupling matrix calculation.
         mask_id2 : str or int
             Identifier for the second mask to use in the coupling matrix calculation.
-        spintype : str
+        spintype : str or int
             The spin configuration to compute the coupling matrix for. Supported values are:
                 - '00' : scalar-scalar (spin-0 × spin-0)
                 - '+' : spin-2 auto (E-mode like)
                 - '-' : spin-2 cross (B-mode like)
                 - '20' : spin-2 × spin-0 mixed term
+                - an integer m : spin-m × spin-0. m=0 and m=2 are equivalent
+                  to '00' and '20'. Higher m are used e.g. for azimuthal
+                  multipole stacking, where the spin sits on a catalog of
+                  positions rather than on the data. Purification is not
+                  supported for this case.
         bin_weight_id : str or int, optional
             Identifier for the binning weights, if applicable.
         beam_id1 : str or int, optional
@@ -273,12 +297,17 @@ class Wiggle(object):
              Pseudo-Cl power spectrum of the mask, covering multipoles up to at least 
             `2 * lmax`, starting at 0. This should be precomputed externally.
         
-        spintype : str
+        spintype : str or int
             The spin configuration to compute the coupling matrix for. Supported values are:
                 - '00' : scalar-scalar (spin-0 × spin-0)
                 - '+' : spin-2 auto (E-mode like)
                 - '-' : spin-2 cross (B-mode like)
                 - '20' : spin-2 × spin-0 mixed term
+                - an integer m : spin-m × spin-0. m=0 and m=2 are equivalent
+                  to '00' and '20'. Higher m are used e.g. for azimuthal
+                  multipole stacking, where the spin sits on a catalog of
+                  positions rather than on the data. Purification is not
+                  supported for this case.
         bin_weight_id : str or int, optional
             Identifier for the binning weights, if applicable.
         beam_id1 : str or int, optional
@@ -297,7 +326,7 @@ class Wiggle(object):
             If an unsupported `spintype` is provided.
         """
         
-        if spintype not in ['TT','TE','TB','22','+','-']: raise ValueError(f'spintype {spintype} not recognized')
+        if not _is_spin(spintype) and spintype not in ['TT','TE','TB','22','+','-']: raise ValueError(f'spintype {spintype} not recognized')
         f = lambda spin1,spin2,parity,gfact: self._get_m(mask_cls,spin1=spin1,spin2=spin2,parity=parity,
                                                     bin_weight_id=bin_weight_id,
                                                     beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact)
@@ -317,6 +346,11 @@ class Wiggle(object):
                 g2 = f(0,0,'-',2)                
             return (g1+g2)/2.
 
+        if _is_spin(spintype):
+            # integer spintype m: the spin-(m,0) cross of a scalar field with a
+            # spin-m one. m=0 and m=2 coincide with 'TT' and 'TE'.
+            if pure_E or pure_B: raise ValueError("purification is not defined for a (spin,0) cross")
+            return f(int(spintype),0,'+',None)
         if spintype=='TT':
             return f(0,0,'+',None)
         elif spintype in ['TE','TB']:
@@ -377,12 +411,7 @@ class Wiggle(object):
         return mcls[:nells] # (2*lmax+1,) by default
 
     def _thfilt_core(self,mask_id1,mask_id2,spin1,spin2,parity,bin_weight_id,beam_id1,beam_id2,gfact):
-        if spin1==0 and spin2==0:
-            ud = self.ud00
-        elif spin1==2 and spin2==0:
-            ud = self._get_wigner(2,0)
-        elif spin1==2 and spin2==2:
-            ud = self._get_wigner(2,2)
+        ud = self.ud00 if (spin1==0 and spin2==0) else self._get_wigner(spin1,spin2)
         b1,b2 = self._get_b1_b2(spin1,spin2,parity,bin_weight_id=bin_weight_id,beam_id1=beam_id1,beam_id2=beam_id2,gfact=gfact) # (N x nbins)
         mask_cls = self._get_mask_cls(mask_id1,mask_id2)
         xi = self._get_corr(mask_cls,parity=parity)
@@ -434,11 +463,12 @@ class Wiggle(object):
             Identifier for the second mask (e.g., in cross-spectra), previously provided through `self.add_mask`. If `None`, 
             defaults to `mask_id1`.
 
-        spintype : str, default='TT'
+        spintype : str or int, default='TT'
             Specifies the spin combination of the fields:
             - `'TT'` for scalar × scalar (e.g., temperature or κ)
             - `'+'`, `'-'` for E/B-mode combinations (spin-2 × spin-2)
             - `'20'` for spin-2 × spin-0 cross spectra (e.g., shear × κ)
+            - an integer m for spin-m × spin-0 (see get_coupling_matrix_from_ids)
 
         bin_weight_id : str or None, optional
             ID of the binning weights to use. If not provided, defaults to uniform binning.
@@ -815,7 +845,7 @@ class Wiggle(object):
                            return_theory_filter=False, pure_E=False,pure_B=False):
         # pcls must already be binned. It can be a concatenation of polarization spectra.
 
-        if spintype not in ['TT','TB','TE','22']: raise NotImplementedError
+        if not _is_spin(spintype) and spintype not in ['TT','TB','TE','22']: raise NotImplementedError
 
         # Get MCM
         cinv = self._get_cinv(mask_id1,mask_id2=mask_id2,spintype=spintype,

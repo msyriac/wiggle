@@ -19,5 +19,6 @@ Welcome to the documentation for ``wiggle``,  a tool for fast unbiased angular p
    :caption: Contents:
 
    readme
+   releasing
    reference
    

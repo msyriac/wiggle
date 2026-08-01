@@ -1,14 +1,15 @@
 [build-system]
-requires = ["meson-python>=0.15", "pybind11>=2.11", "build", "pytest"]
+requires = ["meson-python>=0.17", "pybind11>=2.11", "build", "pytest"]
 build-backend = "mesonpy"
 
 [project]
 name = "pywiggle"
-version = "0.1.18"
+version = "0.1.20"
 description = "Fast angular power spectrum estimator"
 authors = [{name = "Mathew Madhavacheril", email = "mathewsyriac@gmail.com"}]
 readme = "README.rst"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 
 dependencies = [

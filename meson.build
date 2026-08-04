@@ -32,11 +32,23 @@ if host_machine.system() == 'darwin' and not cpp.has_argument('-fopenmp')
   # Enable the pragmas in the frontend and link Homebrew's libomp explicitly.
   # Same recipe scikit-learn / xgboost use for their macOS wheels; in CI,
   # delocate then vendors libomp into the wheel so users don't need Homebrew.
-  brew = find_program('brew', required: false)
-  if not brew.found()
-    error('OpenMP is required. Apple clang needs Homebrew libomp: brew install libomp')
+  # Prefer an explicitly provided runtime: CI sets LIBOMP_PREFIX to a
+  # conda-forge llvm-openmp whose minimum macOS is old enough for delocate to
+  # vendor it into wheels tagged MACOSX_DEPLOYMENT_TARGET=13.0. (Homebrew's
+  # bottle requires the build machine's own macOS version, which delocate
+  # rejects.) Fall back to Homebrew for local development builds.
+  libomp_prefix = run_command(
+    py, '-c', 'import os; print(os.environ.get("LIBOMP_PREFIX", ""))',
+    check: true,
+  ).stdout().strip()
+
+  if libomp_prefix == ''
+    brew = find_program('brew', required: false)
+    if not brew.found()
+      error('OpenMP is required. Set LIBOMP_PREFIX to an OpenMP install prefix, or: brew install libomp')
+    endif
+    libomp_prefix = run_command(brew, '--prefix', 'libomp', check: true).stdout().strip()
   endif
-  libomp_prefix = run_command(brew, '--prefix', 'libomp', check: true).stdout().strip()
 
   omp_dep = declare_dependency(
     compile_args: ['-Xpreprocessor', '-fopenmp', '-I' + libomp_prefix / 'include'],

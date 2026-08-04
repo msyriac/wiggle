@@ -3,47 +3,55 @@ name: Build
 on: [push, pull_request]
 
 jobs:
-         
+
   test-linux:
     name: "Run tests on Linux"
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        python: ["3.13", "3.12", "3.11", "3.10"]
+        python: ["3.14", "3.13", "3.12", "3.11", "3.10"]
 
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      
+
       - name: Run Tests (Linux)
         run: |
           python -m pip install --upgrade pip setuptools wheel meson ninja meson-python numpy scipy pybind11
           python -m pip install --no-build-isolation --editable '.[test]'
           pytest --cov --cov-report html --cov-report xml --cov-report annotate -sx --ignore-glob="*bmodes*.py"
-          
-      - uses: codecov/codecov-action@v2
+
+      - uses: codecov/codecov-action@v5
         with:
+          # v5 requires a repository upload token for reliable uploads:
+          # add CODECOV_TOKEN under repo Settings -> Secrets and variables -> Actions.
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
           verbose: true # optional (default = false)
-          
+
   build_wheels_ubuntu:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # macos-13 is an intel runner, macos-14 is apple silicon
         os: [ubuntu-latest]
 
     steps:
       - uses: actions/checkout@v4
 
-        
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.23.3
-        # env:
-        #   CIBW_SKIP: "pp* *-musllinux*" # TODO: Temporary
+        uses: pypa/cibuildwheel@v3.4.1
+        env:
+          # CPython + glibc only, for fast builds:
+          #  - pp*          PyPy (opt-in by default in cibuildwheel v3, kept for clarity)
+          #  - *-musllinux* Alpine/musl wheels
+          #  - cp*t-*       free-threaded CPython builds (on by default for 3.14 in v3.x)
+          # Note: cibuildwheel v3 also builds Python 3.14 wheels by default and
+          # tags Linux wheels manylinux_2_28 (was manylinux2014 in v2).
+          CIBW_SKIP: "pp* *-musllinux* cp*t-*"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -51,54 +59,54 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build_wheels_macos:
+    name: Build ${{ matrix.cibw_arch }} wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14   # Apple-Silicon → arm64 wheel
+          # Apple Silicon. macos-14 is the oldest available arm64 image, which
+          # keeps the vendored libomp bottle as widely compatible as possible.
+          - os: macos-14
             cibw_arch: arm64
+          # Intel. macos-13 was retired in Dec 2025; macos-15-intel is the last
+          # x86_64 image GitHub will offer (available through ~Aug 2027).
+          - os: macos-15-intel
+            cibw_arch: x86_64
 
     steps:
       - uses: actions/checkout@v4
 
-      # ---------- 1 · compiler + single OpenMP runtime ---------- #
-      - name: Install LLVM + libomp
+      # ---------- 1 · OpenMP runtime only (no full LLVM toolchain) ---------- #
+      - name: Install libomp
         run: |
-          brew install llvm libomp          # unversioned, current LLVM 18.x
-          LLVM_PREFIX="$(brew --prefix llvm)"
+          brew install libomp
+          echo "LIBOMP_PREFIX=$(brew --prefix libomp)" >> "$GITHUB_ENV"
 
-          # put clang/clang++ first in PATH
-          echo "PATH=${LLVM_PREFIX}/bin:$PATH" >> "$GITHUB_ENV"
-          echo "CC=${LLVM_PREFIX}/bin/clang"   >> "$GITHUB_ENV"
-          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
-
-          # headers & linker path for the system libomp
-          echo "CPPFLAGS=-I${LLVM_PREFIX}/include" >> "$GITHUB_ENV"
-          echo "LDFLAGS=-L${LLVM_PREFIX}/lib -lomp \
-                       -Wl,-rpath,@loader_path \
-                       -Wl,-rpath,${LLVM_PREFIX}/lib" >> "$GITHUB_ENV"
-
-      # ---------- 2 · build wheel & leave libomp OUT ---------- #
+      # ---------- 2 · build with Apple clang, vendor libomp INTO the wheel ---------- #
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.23.3
+        uses: pypa/cibuildwheel@v3.4.1
         env:
           CIBW_ARCHS_MACOS: ${{ matrix.cibw_arch }}
-          # CIBW_SKIP: "pp*" # TODO: Temporary
+          # CPython only, no free-threaded builds (see Linux job for details).
+          CIBW_SKIP: "pp* cp*t-*"
 
-          # compile with OpenMP flags
+          # Apple clang requires -Xpreprocessor to accept -fopenmp.
+          # This mirrors scikit-learn / xgboost's macOS wheel builds.
           CIBW_ENVIRONMENT_MACOS: |
-            CFLAGS="-O3 -fopenmp"
-            CXXFLAGS="-O3 -fopenmp"
-            FFLAGS="-O3 -fopenmp=libomp"
-            LDFLAGS="${LDFLAGS}"
+            CC=/usr/bin/clang
+            CXX=/usr/bin/clang++
+            CPPFLAGS="-Xpreprocessor -fopenmp -I$LIBOMP_PREFIX/include"
+            CFLAGS="-O3 -Xpreprocessor -fopenmp -I$LIBOMP_PREFIX/include"
+            CXXFLAGS="-O3 -Xpreprocessor -fopenmp -I$LIBOMP_PREFIX/include"
+            LDFLAGS="-Wl,-rpath,$LIBOMP_PREFIX/lib -L$LIBOMP_PREFIX/lib -lomp"
 
+          # Default delocate behaviour: copy libomp into pywiggle/.dylibs and
+          # rewrite the load command to @loader_path/.dylibs/libomp.dylib.
+          # Do NOT add `-e libomp.dylib` here -- that produces a wheel that
+          # only imports on a machine with Homebrew LLVM installed.
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            delocate-wheel -w {dest_dir}
-            -e libomp.dylib
-            --require-archs x86_64,arm64
-            {wheel}
-
+            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}
 
           MACOSX_DEPLOYMENT_TARGET: "13.0"
 
@@ -110,14 +118,55 @@ jobs:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.cibw_arch }}
           path: wheelhouse/*.whl
 
+  smoke_test_macos_wheels:
+    name: Smoke-test ${{ matrix.cibw_arch }} wheel (clean runner)
+    needs: [build_wheels_macos]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            cibw_arch: arm64
+          - os: macos-15-intel
+            cibw_arch: x86_64
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-wheels-macos*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # This runner never ran `brew install`, so any un-vendored Homebrew
+      # dependency fails here rather than after the wheel is on PyPI.
+      - name: Install and import
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy
+          python -m pip install --no-index --find-links dist pywiggle
+          python -c "import pywiggle; print(pywiggle.__file__)"
+
+      - name: Check for build-machine library paths
+        run: |
+          SO=$(python -c "import pathlib,sysconfig;print(next(pathlib.Path(sysconfig.get_paths()['purelib'],'pywiggle').glob('_wiggle*.so')))")
+          otool -L "$SO"
+          if otool -L "$SO" | grep -qE '/opt/homebrew|/usr/local/opt'; then
+            echo "::error::wheel references build-machine library paths; delocate did not vendor them"
+            exit 1
+          fi
 
   build_sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
-    
+
     outputs:
       version: ${{ steps.get_version.outputs.version }}
-      
+
     steps:
       - uses: actions/checkout@v4
 
@@ -135,14 +184,13 @@ jobs:
           python -m pip install build
           python -m build . --sdist
 
-
       - name: Extract version from sdist filename
         id: get_version
         run: |
           FILE=$(ls dist/pywiggle-*.tar.gz | head -n1)
           VERSION=$(basename "$FILE" | sed -E 's/^pywiggle-([0-9a-zA-Z\.\-]+)\.tar\.gz$/\1/')
           echo "version=$VERSION"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
@@ -150,7 +198,7 @@ jobs:
           path: dist/*.tar.gz
 
   upload_pypi:
-    needs: [build_wheels_ubuntu, build_sdist, build_wheels_macos]
+    needs: [build_wheels_ubuntu, build_sdist, build_wheels_macos, smoke_test_macos_wheels]
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
@@ -169,20 +217,19 @@ jobs:
           password: ${{ secrets.PYPI_TOKEN }}
           # To test: repository_url: https://test.pypi.org/legacy/
 
-
   test-wheel:
     needs: [upload_pypi, build_sdist]
     name: "Run tests on ${{ matrix.os }} with uploaded wheels"
     runs-on: ${{ matrix.os }}
     continue-on-error: true
-    
+
     env:
       VERSION: ${{ needs.build_sdist.outputs.version }}
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-13, macos-14]
-        python: ["3.13", "3.12", "3.11", "3.10"]
+        os: [ubuntu-latest, macos-14, macos-15-intel]
+        python: ["3.14", "3.13", "3.12", "3.11", "3.10"]
 
     steps:
       - uses: actions/checkout@v4
@@ -209,8 +256,7 @@ jobs:
           exit 1
           fi
           done
-          
-          
+
       - name: Run Tests
         run: |
           cd ~

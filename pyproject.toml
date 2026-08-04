@@ -4,7 +4,7 @@ build-backend = "mesonpy"
 
 [project]
 name = "pywiggle"
-version = "0.1.21"
+version = "0.1.22"
 description = "Fast angular power spectrum estimator"
 authors = [{name = "Mathew Madhavacheril", email = "mathewsyriac@gmail.com"}]
 readme = "README.rst"
@@ -14,7 +14,6 @@ requires-python = ">=3.10"
 
 dependencies = [
     'numpy',
-     "pybind11>=2.11",
      "healpy",
     'fastgl>=0.1.11',
     'scipy>=1.0',

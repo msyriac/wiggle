@@ -151,7 +151,7 @@ jobs:
       - name: Install and import
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy scipy
+          python -m pip install numpy scipy threadpoolctl
           python -m pip install --no-index --find-links dist pywiggle
           python -c "import pywiggle; print(pywiggle.__file__)"
 
@@ -163,6 +163,24 @@ jobs:
             echo "::error::wheel references build-machine library paths; delocate did not vendor them"
             exit 1
           fi
+
+      # Guard against silently shipping a serial build: importing pywiggle must
+      # load an OpenMP runtime (the vendored libomp), and it must come from
+      # inside the wheel, not from a system/Homebrew path.
+      - name: Verify OpenMP threading is enabled
+        run: |
+          python - <<'EOF'
+          import pywiggle
+          from threadpoolctl import threadpool_info
+
+          omp = [d for d in threadpool_info() if d.get("user_api") == "openmp"]
+          for d in omp:
+              print(f'{d["filepath"]}  (num_threads={d["num_threads"]})')
+
+          assert omp, "No OpenMP runtime loaded: wheel was built without OpenMP support"
+          assert any("pywiggle" in d["filepath"] for d in omp), \
+              "OpenMP runtime loaded from outside the wheel; libomp was not vendored"
+          EOF
 
   build_sdist:
     name: Build source distribution

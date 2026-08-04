@@ -1,7 +1,7 @@
 project(
   'pywiggle',
   'cpp',
-  version: '0.1.23',
+  version: '0.1.24',
   default_options: ['cpp_std=c++17'],
   meson_version: '>=1.1.0',
 )

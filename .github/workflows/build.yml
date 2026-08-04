@@ -85,11 +85,20 @@ jobs:
       - uses: actions/checkout@v4
 
       # ---------- 1 · OpenMP runtime with a LOW minimum macOS ---------- #
+      # pywiggle does NOT vendor libomp. fastgl (a hard dependency) already
+      # vendors one, and two copies of LLVM libomp in one process abort with
+      # "OMP: Error #15". By rewriting this dylib's install name (LC_ID_DYLIB)
+      # before linking, _wiggle.so records a load command pointing into
+      # fastgl's .dylibs, so exactly one runtime is ever loaded.
+      # Keep the conda-forge build here identical to fastgl's.
       - name: Install OpenMP runtime (conda-forge llvm-openmp)
         run: |
           mkdir -p "$HOME/libomp-prefix"
           curl -sSL "${{ matrix.omp_url }}" | tar -xj -C "$HOME/libomp-prefix"
-          ls "$HOME/libomp-prefix/lib"
+          install_name_tool -id "@loader_path/../fastgl/.dylibs/libomp.dylib" \
+            "$HOME/libomp-prefix/lib/libomp.dylib"
+          codesign --force -s - "$HOME/libomp-prefix/lib/libomp.dylib" || true
+          otool -D "$HOME/libomp-prefix/lib/libomp.dylib"
           echo "LIBOMP_PREFIX=$HOME/libomp-prefix" >> "$GITHUB_ENV"
 
       # ---------- 2 · build with Apple clang, vendor libomp INTO the wheel ---------- #
@@ -112,12 +121,12 @@ jobs:
             CXXFLAGS="-O3 -Xpreprocessor -fopenmp -I$LIBOMP_PREFIX/include"
             LDFLAGS="-Wl,-rpath,$LIBOMP_PREFIX/lib -L$LIBOMP_PREFIX/lib -lomp"
 
-          # Default delocate behaviour: copy libomp into pywiggle/.dylibs and
-          # rewrite the load command to @loader_path/.dylibs/libomp.dylib.
-          # Do NOT add `-e libomp.dylib` here -- that produces a wheel that
-          # only imports on a machine with Homebrew LLVM installed.
+          # libomp is deliberately NOT vendored here: the load command already
+          # points into fastgl/.dylibs (see the install_name_tool step above),
+          # so delocate must skip it rather than copy a second runtime in.
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}
+            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v
+            -e libomp --ignore-missing-dependencies {wheel}
 
           MACOSX_DEPLOYMENT_TARGET: "13.0"
 
@@ -178,9 +187,9 @@ jobs:
             exit 1
           fi
 
-      # Guard against silently shipping a serial build: importing pywiggle must
-      # load an OpenMP runtime (the vendored libomp), and it must come from
-      # inside the wheel, not from a system/Homebrew path.
+      # Guard against (a) shipping a serial build and (b) the duplicate-runtime
+      # abort: exactly ONE OpenMP runtime must load, and it must be the copy
+      # vendored by fastgl that pywiggle shares.
       - name: Verify OpenMP threading is enabled
         run: |
           python - <<'EOF'
@@ -190,10 +199,16 @@ jobs:
           omp = [d for d in threadpool_info() if d.get("user_api") == "openmp"]
           for d in omp:
               print(f'{d["filepath"]}  (num_threads={d["num_threads"]})')
+          paths = {d["filepath"] for d in omp}
 
           assert omp, "No OpenMP runtime loaded: wheel was built without OpenMP support"
-          assert any("pywiggle" in d["filepath"] for d in omp), \
-              "OpenMP runtime loaded from outside the wheel; libomp was not vendored"
+          assert len(paths) == 1, f"Multiple OpenMP runtimes loaded (OMP Error #15 risk): {paths}"
+          assert any("fastgl" in p or "pywiggle" in p for p in paths), \
+              f"OpenMP runtime came from an unexpected location: {paths}"
+
+          # The actual crash reproducer: constructing Wiggle initialises OpenMP.
+          w = pywiggle.core.Wiggle(1000)
+          print("Wiggle constructed OK:", w)
           EOF
 
   build_sdist:

@@ -20,7 +20,7 @@ jobs:
 
       - name: Run Tests (Linux)
         run: |
-          python -m pip install --upgrade pip setuptools wheel meson ninja meson-python numpy scipy pybind11
+          python -m pip install --upgrade pip setuptools wheel meson ninja meson-python cython numpy scipy pybind11
           python -m pip install --no-build-isolation --editable '.[test]'
           pytest --cov --cov-report html --cov-report xml --cov-report annotate -sx --ignore-glob="*bmodes*.py"
 
@@ -52,6 +52,8 @@ jobs:
           # Note: cibuildwheel v3 also builds Python 3.14 wheels by default and
           # tags Linux wheels manylinux_2_28 (was manylinux2014 in v2).
           CIBW_SKIP: "pp* *-musllinux* cp*t-*"
+          # Full meson/compiler output in the CI log; remove once builds are stable.
+          CIBW_BUILD_VERBOSITY: 1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -90,6 +92,8 @@ jobs:
           CIBW_ARCHS_MACOS: ${{ matrix.cibw_arch }}
           # CPython only, no free-threaded builds (see Linux job for details).
           CIBW_SKIP: "pp* cp*t-*"
+          # Full meson/compiler output in the CI log; remove once builds are stable.
+          CIBW_BUILD_VERBOSITY: 1
 
           # Apple clang requires -Xpreprocessor to accept -fopenmp.
           # This mirrors scikit-learn / xgboost's macOS wheel builds.
@@ -180,7 +184,7 @@ jobs:
           python -m pip install -U pip
           python -m pip install -U setuptools
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install numpy pybind11 scipy
+          python -m pip install cython numpy pybind11 scipy
           python -m pip install build
           python -m build . --sdist
 

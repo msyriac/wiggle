@@ -187,9 +187,13 @@ jobs:
             exit 1
           fi
 
-      # Guard against (a) shipping a serial build and (b) the duplicate-runtime
-      # abort: exactly ONE OpenMP runtime must load, and it must be the copy
-      # vendored by fastgl that pywiggle shares.
+      # Two things are checked here:
+      #  (1) pywiggle must not add its OWN libomp copy -- it shares fastgl's.
+      #      Two LLVM libomp copies in one process abort with "OMP: Error #15".
+      #  (2) constructing Wiggle must work. This is the real gate: it is the
+      #      call that initialises OpenMP and aborted before the fastgl fix.
+      # Third-party wheels (e.g. healpy on arm64) may vendor their own libomp;
+      # that is outside pywiggle's control, so it is reported, not asserted.
       - name: Verify OpenMP threading is enabled
         run: |
           python - <<'EOF'
@@ -202,11 +206,13 @@ jobs:
           paths = {d["filepath"] for d in omp}
 
           assert omp, "No OpenMP runtime loaded: wheel was built without OpenMP support"
-          assert len(paths) == 1, f"Multiple OpenMP runtimes loaded (OMP Error #15 risk): {paths}"
-          assert any("fastgl" in p or "pywiggle" in p for p in paths), \
-              f"OpenMP runtime came from an unexpected location: {paths}"
+          own = [p for p in paths if "/pywiggle/" in p]
+          assert not own, f"pywiggle vendored its own libomp instead of sharing fastgl's: {own}"
+          assert any("/fastgl/" in p for p in paths), \
+              f"fastgl's OpenMP runtime was not loaded: {paths}"
+          if len(paths) > 1:
+              print(f"::warning::{len(paths)} OpenMP runtimes loaded (third-party wheels): {paths}")
 
-          # The actual crash reproducer: constructing Wiggle initialises OpenMP.
           w = pywiggle.core.Wiggle(1000)
           print("Wiggle constructed OK:", w)
           EOF

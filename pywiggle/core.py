@@ -41,6 +41,35 @@ Core classes and functions
 """
 
 
+def compute_wigner_d_matrix(lmax,spin1,spin2,mu):
+    """Evaluate the Wigner-d matrix d^ell_{spin1,spin2}(theta) at each of a set of angles.
+
+    Thin wrapper around the compiled `_wiggle._compute_wigner_d_matrix` extension,
+    which fills the array via `wiggle::compute_wigner_d_series` (one angle per row,
+    OpenMP-parallelized over angles). Used by `Wiggle._get_wigner` to build the
+    per-multipole Wigner-d values needed for the GL-quadrature mode-coupling
+    matrix factorization.
+
+    Parameters
+    ----------
+    lmax : int
+        Maximum multipole. The returned matrix has columns for ell=0..lmax.
+    spin1 : int
+        First spin index of the Wigner-d function, d^ell_{spin1,spin2}.
+    spin2 : int
+        Second spin index of the Wigner-d function, d^ell_{spin1,spin2}.
+    mu : array_like
+        1D array of cos(theta) values at which to evaluate the Wigner-d series.
+
+    Returns
+    -------
+    ndarray
+        2D array of shape (len(mu), lmax+1), with d^ell_{spin1,spin2}(theta)
+        at row theta=arccos(mu) and column ell.
+    """
+    return _wiggle._compute_wigner_d_matrix(lmax,spin1,spin2,mu)
+
+
 class Wiggle(object):
     """
     Position-space Power Spectrum Mode-Decoupler
@@ -194,7 +223,7 @@ class Wiggle(object):
         return b1,b2
 
     def _get_wigner(self,spin1,spin2):
-        return _wiggle._compute_wigner_d_matrix(self.lmax,spin1,spin2,self.mu)
+        return compute_wigner_d_matrix(self.lmax,spin1,spin2,self.mu)
         
     def _get_m(self,mask_cls,spin1,spin2,parity,bin_weight_id,
                beam_id1,beam_id2,gfact=None):
